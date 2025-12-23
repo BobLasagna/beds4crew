@@ -6,7 +6,7 @@ import IconButton from "@mui/material/IconButton";
 import { useLocation } from "react-router-dom";
 import PropertySearchBar from "../components/PropertySearchBar";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, formatPriceDisplay } from "../utils/api";
+import { fetchWithAuth, formatPriceDisplay, API_URL, BASE_URL } from "../utils/api";
 
 export default function PropertyFeedPage() {
   const [properties, setProperties] = useState([]);
@@ -20,7 +20,7 @@ export default function PropertyFeedPage() {
   // Fetch user's wishlist on mount and when navigating to this page
   useEffect(() => {
     if (!user?.id) return;
-    fetchWithAuth("http://10.0.0.198:3001/api/auth/me")
+    fetchWithAuth(`${API_URL}/auth/me`)
         .then(res => res.json())
         .then(data => setWishlist(data.wishList || []));
   }, [user.id, location.pathname]); // Refetch when navigating to this page
@@ -32,7 +32,7 @@ export default function PropertyFeedPage() {
     }
     const inWishlist = wishlist.includes(propertyId);
     const method = inWishlist ? "DELETE" : "POST";
-    const res = await fetchWithAuth(`http://10.0.0.198:3001/api/properties/${propertyId}/wishlist`, {
+    const res = await fetchWithAuth(`${API_URL}/properties/${propertyId}/wishlist`, {
       method: method
     });
     if (res.ok) {
@@ -49,7 +49,7 @@ export default function PropertyFeedPage() {
 
   // Fetch all properties on mount and when navigating to this page
   useEffect(() => {
-    fetch("http://10.0.0.198:3001/api/properties")
+    fetch(`${API_URL}/properties`)
       .then(res => res.json())
       .then(data => {
         // Filter to show only active properties to guests
@@ -69,7 +69,7 @@ export default function PropertyFeedPage() {
               <CardMedia
                 component="img"
                 height="160"
-                image={`http://10.0.0.198:3001${prop.images?.[0]?.path || prop.images?.[0]}` || "https://mui.com/static/images/cards/contemplative-reptile.jpg"}
+                image={`${BASE_URL}${prop.images?.[0]?.path || prop.images?.[0]}` || "https://mui.com/static/images/cards/contemplative-reptile.jpg"}
                 alt={prop.title}
               />
               <CardContent>

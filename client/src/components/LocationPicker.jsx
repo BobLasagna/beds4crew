@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { TextField, InputAdornment, IconButton, Button } from '@mui/material';
 import ClearIcon from '@mui/icons-material/Clear';
+import { API_URL } from '../utils/api';
 
 // Fix default icon paths (bundler quirk)
 delete L.Icon.Default.prototype._getIconUrl;
@@ -48,7 +49,7 @@ export default function LocationPicker({ value, onChange }) {
     if (!query.trim()) return;
     setLoading(true);
     try {
-        const res = await fetch(`http://10.0.0.198:3001/api/geocoding/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`${API_URL}/geocoding/search?q=${encodeURIComponent(query)}`);
         // console.log('Geocoding res:', res);
         const data = await res.json();
         if (!data.lat || !data.lon) {

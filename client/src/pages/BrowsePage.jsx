@@ -22,7 +22,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ClearIcon from '@mui/icons-material/Clear';
 import MapView from '../components/HotelMapView';
 import { useSnackbar } from '../components/AppSnackbar';
-import { fetchWithAuth, formatPriceDisplay } from '../utils/api';
+import { fetchWithAuth, formatPriceDisplay, API_URL, BASE_URL } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 //TODO: Move to config file or generate based off existing data
@@ -57,7 +57,7 @@ export default function BrowsePage() {
   // Fetch user's wishlist
   useEffect(() => {
     if (!user?.id) return;
-    fetchWithAuth('http://10.0.0.198:3001/api/auth/me')
+    fetchWithAuth(`${API_URL}/auth/me`)
       .then(res => res.json())
       .then(data => setWishlist(data.wishList || []))
       .catch(err => console.error('Failed to fetch wishlist:', err));
@@ -66,7 +66,7 @@ export default function BrowsePage() {
   // Fetch all properties from DB
   useEffect(() => {
     setLoading(true);
-    fetch('http://10.0.0.198:3001/api/properties')
+    fetch(`${API_URL}/properties`)
       .then(res => res.json())
       .then(data => {
         // Only include active properties with location data from paid hosts
@@ -168,7 +168,7 @@ export default function BrowsePage() {
     }
     setSearchLoading(true);
     try {
-      const res = await fetch(`http://10.0.0.198:3001/api/geocoding/search?q=${encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`${API_URL}/geocoding/search?q=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       if (!data.lat || !data.lon) {
         snackbar('No results found for that location', 'error');
@@ -196,7 +196,7 @@ export default function BrowsePage() {
 
     try {
       const res = await fetchWithAuth(
-        `http://10.0.0.198:3001/api/properties/${propertyId}/wishlist`,
+        `${API_URL}/properties/${propertyId}/wishlist`,
         { method }
       );
       if (res.ok) {
@@ -360,7 +360,7 @@ export default function BrowsePage() {
                   <CardMedia
                     component="img"
                     height="180"
-                    image={`http://10.0.0.198:3001${prop.images?.[0]?.path || prop.images?.[0]}` || 'https://via.placeholder.com/300x180?text=No+Image'}
+                    image={`${BASE_URL}${prop.images?.[0]?.path || prop.images?.[0]}` || 'https://via.placeholder.com/300x180?text=No+Image'}
                     alt={prop.title}
                     sx={{ cursor: 'pointer' }}
                     onClick={() => setCenter({ lat: prop.latitude, lng: prop.longitude })}

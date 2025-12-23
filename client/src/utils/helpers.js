@@ -1,4 +1,5 @@
 // Image optimization utilities
+import { BASE_URL } from './api';
 
 // Lazy load images with intersection observer
 export const lazyLoadImage = (imageElement) => {
@@ -22,7 +23,7 @@ export const lazyLoadImage = (imageElement) => {
 };
 
 // Format image URL with proper base URL
-export const formatImageUrl = (imagePath, baseUrl = 'http://10.0.0.198:3001') => {
+export const formatImageUrl = (imagePath, baseUrl = BASE_URL) => {
   if (!imagePath) return null;
   if (imagePath.startsWith('http')) return imagePath;
   return `${baseUrl}${imagePath}`;

@@ -6,7 +6,7 @@ import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import PaymentIcon from "@mui/icons-material/Payment";
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth } from "../utils/api";
+import { fetchWithAuth, API_URL } from "../utils/api";
 
 export default function SupportPage() {
   const navigate = useNavigate();
@@ -36,7 +36,7 @@ export default function SupportPage() {
   const handleToggleRole = async () => {
     try {
       setLoading(true);
-      const res = await fetchWithAuth("http://10.0.0.198:3001/api/users/toggle-role", {
+      const res = await fetchWithAuth(`${API_URL}/users/toggle-role`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" }
       });
@@ -65,7 +65,7 @@ export default function SupportPage() {
   const handleTogglePayment = async () => {
     try {
       setLoading(true);
-      const res = await fetchWithAuth("http://10.0.0.198:3001/api/users/toggle-payment", {
+      const res = await fetchWithAuth(`${API_URL}/users/toggle-payment`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" }
       });
@@ -89,7 +89,7 @@ export default function SupportPage() {
   const handleClearCache = async () => {
     try {
       setLoading(true);
-      const res = await fetch("http://10.0.0.198:3001/api/properties/admin/clear-cache", {
+      const res = await fetch(`${API_URL}/properties/admin/clear-cache`, {
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
