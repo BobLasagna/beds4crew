@@ -9,6 +9,7 @@ import { LoadingState } from "../components/EmptyState";
 import RoomBedsConfigurator from "../components/RoomBedsConfigurator";
 import PhotoTile from "../components/PhotoTile";
 import PropertyCalendar from "../components/PropertyCalendar";
+import BlockPeriodManager from "../components/BlockPeriodManager";
 import { commonStyles } from "../utils/styleConstants";
 import EditIcon from "@mui/icons-material/Edit";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -21,6 +22,7 @@ export default function PropertyDetailPage() {
   const [property, setProperty] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [bookings, setBookings] = useState([]);
+  const [blockedPeriods, setBlockedPeriods] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [startDate, setStartDate] = useState(dayjs());
   const [endDate, setEndDate] = useState(null);
@@ -211,6 +213,37 @@ export default function PropertyDetailPage() {
     }
   };
 
+  const handleBlockAdded = async (blockData) => {
+    const res = await fetchWithAuth(`${API_URL}/properties/${id}/block`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(blockData)
+    });
+    
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.message || "Failed to add block");
+    }
+    
+    const updated = await res.json();
+    setProperty(updated.property);
+    snackbar("Period blocked successfully");
+  };
+
+  const handleBlockRemoved = async (blockId) => {
+    const res = await fetchWithAuth(`${API_URL}/properties/${id}/block/${blockId}`, {
+      method: "DELETE"
+    });
+    
+    if (!res.ok) {
+      throw new Error("Failed to remove block");
+    }
+    
+    const updated = await res.json();
+    setProperty(updated.property);
+    snackbar("Block removed successfully");
+  };
+
   if (!property) return <LoadingState message="Loading property details..." />;
 
   const nights = startDate && endDate ? dayjs(endDate).startOf("day").diff(dayjs(startDate).startOf("day"), "day") : 0;
@@ -388,6 +421,17 @@ export default function PropertyDetailPage() {
         </Card>
       )}
 
+      {/* Block Period Manager - Host Only */}
+      {isOwner && (
+        <Card sx={{ ...commonStyles.sectionSpacing, p: { xs: 2, sm: 3 } }}>
+          <BlockPeriodManager 
+            property={property} 
+            onBlockAdded={handleBlockAdded}
+            onBlockRemoved={handleBlockRemoved}
+          />
+        </Card>
+      )}
+
       {/* Availability Calendar Toggle & Display */}
       <Card sx={{ ...commonStyles.sectionSpacing, p: { xs: 2, sm: 3 } }}>
         <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={1} mb={showCalendar ? 2 : 0}>
@@ -403,7 +447,14 @@ export default function PropertyDetailPage() {
             {showCalendar ? "Hide Calendar" : "Show Calendar"}
           </Button>
         </Box>
-        {showCalendar && <PropertyCalendar bookings={bookings} monthsToShow={3} />}
+        {showCalendar && (
+          <PropertyCalendar 
+            bookings={bookings} 
+            blockedPeriods={property.blockedPeriods || []}
+            monthsToShow={3} 
+            isOwner={isOwner}
+          />
+        )}
       </Card>
 
       {/* Booking Section */}

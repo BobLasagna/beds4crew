@@ -38,6 +38,19 @@ const PropertySchema = new mongoose.Schema(
     latitude: { type: Number, required: false },
     longitude: { type: Number, required: false },
     isActive: { type: Boolean, default: false }, // Property is disabled until rooms are configured
+    // Host-defined unavailable periods
+    blockedPeriods: [
+      {
+        startDate: { type: Date, required: true },
+        endDate: { type: Date, required: true },
+        reason: { type: String, default: "Unavailable" }, // e.g., "Maintenance", "Holiday", "Personal"
+        blockType: { type: String, enum: ["entire", "room", "bed"], required: true },
+        // For specific room/bed blocking
+        roomIndex: { type: Number }, // Which room (if blockType is "room" or "bed")
+        bedIndex: { type: Number }, // Which bed (if blockType is "bed")
+        createdAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   { timestamps: true }
 );

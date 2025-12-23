@@ -335,4 +335,126 @@ router.post("/admin/clear-cache", async (req, res) => {
   }
 });
 
+// Add blocked period (Host only - verify ownership)
+router.post("/:id/block", verifyToken, async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id);
+    
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
+    }
+    
+    // Verify ownership
+    if (property.ownerHost.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Unauthorized: You can only block your own properties" });
+    }
+
+    const { startDate, endDate, reason, blockType, roomIndex, bedIndex } = req.body;
+    
+    // Validate dates
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: "Start date and end date are required" });
+    }
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (start >= end) {
+      return res.status(400).json({ message: "End date must be after start date" });
+    }
+    
+    // Validate block type
+    if (!["entire", "room", "bed"].includes(blockType)) {
+      return res.status(400).json({ message: "Invalid block type. Must be 'entire', 'room', or 'bed'" });
+    }
+    
+    // Validate room/bed indices if needed
+    if (blockType === "room" || blockType === "bed") {
+      if (roomIndex === undefined || roomIndex < 0 || roomIndex >= property.rooms.length) {
+        return res.status(400).json({ message: "Valid room index is required for room/bed blocking" });
+      }
+    }
+    
+    if (blockType === "bed") {
+      if (bedIndex === undefined || bedIndex < 0 || bedIndex >= property.rooms[roomIndex].beds.length) {
+        return res.status(400).json({ message: "Valid bed index is required for bed blocking" });
+      }
+    }
+    
+    // Add the blocked period
+    const blockedPeriod = {
+      startDate: start,
+      endDate: end,
+      reason: sanitizeInput(reason) || "Unavailable",
+      blockType,
+      roomIndex: blockType !== "entire" ? roomIndex : undefined,
+      bedIndex: blockType === "bed" ? bedIndex : undefined
+    };
+    
+    property.blockedPeriods.push(blockedPeriod);
+    await property.save();
+    
+    // Clear cache
+    cache.delete(`property:${req.params.id}`);
+    cache.delete("properties:all");
+    
+    res.json({ message: "Period blocked successfully", property });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to block period", error: error.message });
+  }
+});
+
+// Remove blocked period (Host only - verify ownership)
+router.delete("/:id/block/:blockId", verifyToken, async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id);
+    
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
+    }
+    
+    // Verify ownership
+    if (property.ownerHost.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Unauthorized: You can only unblock your own properties" });
+    }
+
+    const blockId = req.params.blockId;
+    const blockIndex = property.blockedPeriods.findIndex(
+      block => block._id.toString() === blockId
+    );
+    
+    if (blockIndex === -1) {
+      return res.status(404).json({ message: "Blocked period not found" });
+    }
+    
+    property.blockedPeriods.splice(blockIndex, 1);
+    await property.save();
+    
+    // Clear cache
+    cache.delete(`property:${req.params.id}`);
+    cache.delete("properties:all");
+    
+    res.json({ message: "Block removed successfully", property });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to remove block", error: error.message });
+  }
+});
+
+// Get blocked periods for a property (public - for calendar display)
+router.get("/:id/blocks", async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id)
+      .select("blockedPeriods")
+      .lean();
+      
+    if (!property) {
+      return res.status(404).json({ message: "Property not found" });
+    }
+    
+    res.json(property.blockedPeriods || []);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch blocked periods", error: error.message });
+  }
+});
+
 module.exports = router;
