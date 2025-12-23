@@ -1,0 +1,239 @@
+{
+    "most_common": [
+      {
+        "id": "bed_common_001",
+        "name": "Twin Bed",
+        "canonical_size": "Twin",
+        "aliases": ["Single Bed"],
+        "dimensions": {
+          "width": 39,
+          "length": 75,
+          "height": null
+        },
+        "description": "Narrow bed for one person, commonly used in children’s rooms, dorms, and shared spaces.",
+        "image_urls": [
+          "https://unsplash.com/photos/white-bedspread-on-bed-frame"
+        ]
+      },
+      {
+        "id": "bed_common_002",
+        "name": "Twin XL Bed",
+        "canonical_size": "Twin XL",
+        "aliases": [],
+        "dimensions": {
+          "width": 39,
+          "length": 80,
+          "height": null
+        },
+        "description": "Twin-width bed with extra length, especially common in college dormitories for taller sleepers.",
+        "image_urls": [
+          "https://unsplash.com/photos/minimal-dorm-bed"
+        ]
+      },
+      {
+        "id": "bed_common_003",
+        "name": "Full Bed",
+        "canonical_size": "Full",
+        "aliases": ["Double Bed"],
+        "dimensions": {
+          "width": 54,
+          "length": 75,
+          "height": null
+        },
+        "description": "Medium-width bed for one person or two closely, common in apartments and guest rooms.",
+        "image_urls": [
+          "https://unsplash.com/photos/bed-with-white-linens"
+        ]
+      },
+      {
+        "id": "bed_common_004",
+        "name": "Queen Bed",
+        "canonical_size": "Queen",
+        "aliases": [],
+        "dimensions": {
+          "width": 60,
+          "length": 80,
+          "height": null
+        },
+        "description": "Most popular adult bed size, offering good space for couples without requiring a huge bedroom.",
+        "image_urls": [
+          "https://unsplash.com/photos/modern-bedroom-queen-bed"
+        ]
+      },
+      {
+        "id": "bed_common_005",
+        "name": "King Bed",
+        "canonical_size": "King",
+        "aliases": [],
+        "dimensions": {
+          "width": 76,
+          "length": 80,
+          "height": null
+        },
+        "description": "Extra-wide bed giving couples maximum personal sleeping space.",
+        "image_urls": [
+          "https://unsplash.com/photos/large-master-bedroom-bed"
+        ]
+      },
+      {
+        "id": "bed_common_006",
+        "name": "California King Bed",
+        "canonical_size": "California King",
+        "aliases": ["CK"],
+        "dimensions": {
+          "width": 72,
+          "length": 84,
+          "height": null
+        },
+        "description": "Longer but slightly narrower than a standard king, designed for tall sleepers.",
+        "image_urls": [
+          "https://unsplash.com/photos/california-king-bedroom"
+        ]
+      }
+    ],
+  
+    "structural_and_frame": [
+      {
+        "id": "bed_frame_001",
+        "name": "Platform Bed",
+        "canonical_size": "Varies",
+        "aliases": [],
+        "dimensions": {
+          "width": null,
+          "length": null,
+          "height": 14
+        },
+        "description": "Bed frame with slats or solid base, supporting a mattress without a box spring.",
+        "image_urls": [
+          "https://unsplash.com/photos/platform-bed-frame"
+        ]
+      },
+      {
+        "id": "bed_frame_002",
+        "name": "Panel Bed",
+        "canonical_size": "Varies",
+        "aliases": [],
+        "dimensions": {
+          "width": null,
+          "length": null,
+          "height": 24
+        },
+        "description": "Traditional bed frame using headboard, footboard, and side rails with a box spring.",
+        "image_urls": [
+          "https://unsplash.com/photos/traditional-panel-bed"
+        ]
+      },
+      {
+        "id": "bed_frame_003",
+        "name": "Murphy Bed",
+        "canonical_size": "Varies",
+        "aliases": ["Wall Bed"],
+        "dimensions": {
+          "width": null,
+          "length": null,
+          "height": 16
+        },
+        "description": "Wall-mounted bed that folds away to save floor space.",
+        "image_urls": [
+          "https://commons.wikimedia.org/wiki/File:Murphy_bed_open.jpg"
+        ]
+      },
+      {
+        "id": "bed_frame_004",
+        "name": "Captain’s Bed",
+        "canonical_size": "Varies",
+        "aliases": ["Storage Bed"],
+        "dimensions": {
+          "width": null,
+          "length": null,
+          "height": 18
+        },
+        "description": "Bed with built-in drawers or storage compartments underneath the mattress.",
+        "image_urls": [
+          "https://unsplash.com/photos/storage-bed-drawers"
+        ]
+      }
+    ],
+  
+    "sofa_and_convertible": [
+      {
+        "id": "bed_convertible_001",
+        "name": "Sofa Bed",
+        "canonical_size": "Full",
+        "aliases": ["Pull-Out Couch"],
+        "dimensions": {
+          "width": 54,
+          "length": 75,
+          "height": 18
+        },
+        "description": "Couch that converts into a bed, commonly used in living rooms or small apartments.",
+        "image_urls": [
+          "https://unsplash.com/photos/sofa-bed-open"
+        ]
+      },
+      {
+        "id": "bed_convertible_002",
+        "name": "Futon",
+        "canonical_size": "Full",
+        "aliases": ["Futon Mattress"],
+        "dimensions": {
+          "width": 54,
+          "length": 75,
+          "height": 10
+        },
+        "description": "Foldable mattress and frame functioning as both a couch and a bed.",
+        "image_urls": [
+          "https://unsplash.com/photos/futon-sofa-bed"
+        ]
+      },
+      {
+        "id": "bed_convertible_003",
+        "name": "Daybed",
+        "canonical_size": "Twin",
+        "aliases": [],
+        "dimensions": {
+          "width": 39,
+          "length": 75,
+          "height": 16
+        },
+        "description": "Bed styled like a couch, used for lounging during the day and sleeping at night.",
+        "image_urls": [
+          "https://unsplash.com/photos/daybed-living-room"
+        ]
+      }
+    ],
+  
+    "portable_and_temporary": [
+      {
+        "id": "bed_portable_001",
+        "name": "Air Mattress",
+        "canonical_size": "Varies",
+        "aliases": [],
+        "dimensions": {
+          "width": null,
+          "length": null,
+          "height": 9
+        },
+        "description": "Inflatable mattress used for guests, camping, or temporary sleeping arrangements.",
+        "image_urls": [
+          "https://unsplash.com/photos/air-mattress-indoor"
+        ]
+      },
+      {
+        "id": "bed_portable_002",
+        "name": "Rollaway Bed",
+        "canonical_size": "Twin",
+        "aliases": [],
+        "dimensions": {
+          "width": 39,
+          "length": 75,
+          "height": 15
+        },
+        "description": "Foldable wheeled bed commonly used in hotels for extra guests.",
+        "image_urls": [
+          "https://commons.wikimedia.org/wiki/File:Rollaway_bed.jpg"
+        ]
+      }
+    ]
+  }
+  

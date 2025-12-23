@@ -1,0 +1,398 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Box, Typography, Card, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Alert, CircularProgress, MenuItem, Grid, Input } from "@mui/material";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import dayjs from "dayjs";
+import { useSnackbar } from "../components/AppSnackbar";
+import { fetchWithAuth, API_URL, BASE_URL } from "../utils/api";
+import RoomBedsConfigurator from "../components/RoomBedsConfigurator";
+import PhotoTile from "../components/PhotoTile";
+import PropertyCalendar from "../components/PropertyCalendar";
+import EditIcon from "@mui/icons-material/Edit";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+
+const categories = ["apartment", "condo", "house", "hostel", "flat", "villa"];
+
+export default function PropertyDetailPage() {
+  const { id } = useParams();
+  const [property, setProperty] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [startDate, setStartDate] = useState(dayjs());
+  const [endDate, setEndDate] = useState(null);
+  const [status, setStatus] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [captionLoading, setCaptionLoading] = useState({});
+  const [deleteLoading, setDeleteLoading] = useState({});
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletePropertyLoading, setDeletePropertyLoading] = useState(false);
+  const snackbar = useSnackbar();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    setCurrentUser(user);
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_URL}/properties/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        setProperty(data);
+        setEditForm(data);
+      });
+    
+    // Fetch bookings for this property
+    fetch(`${API_URL}/bookings/property/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        // Only include confirmed bookings for the calendar
+        const confirmedBookings = data.filter(b => b.status === "confirmed" || b.status === "pending");
+        setBookings(confirmedBookings);
+      })
+      .catch(err => console.error("Failed to fetch bookings:", err));
+  }, [id]);
+
+  useEffect(() => {
+    if (currentUser && property) {
+      setIsOwner(currentUser.id === property.ownerHost._id);
+    }
+  }, [currentUser, property]);
+
+  const handleBook = async () => {
+    if (!startDate || !endDate) return setStatus("Please select valid dates");
+    try {
+      const res = await fetchWithAuth(`${API_URL}/bookings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId: id, startDate, endDate })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      snackbar("Booking successful!");
+      navigate("/trips");
+    } catch (err) {
+      setStatus(`Error: ${err.message}`);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    try {
+      setLoading(true);
+      const res = await fetchWithAuth(`${API_URL}/properties/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !property.isActive })
+      });
+      if (!res.ok) throw new Error("Failed to update property");
+      const updated = await res.json();
+      setProperty(updated);
+      snackbar(`Property ${updated.isActive ? "activated" : "disabled"} successfully`);
+      window.location.reload();
+    } catch (err) {
+      snackbar("Failed to update property", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      setLoading(true);
+      const res = await fetchWithAuth(`${API_URL}/properties/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm)
+      });
+      if (!res.ok) throw new Error("Failed to update property");
+      const updated = await res.json();
+      setProperty(updated);
+      setEditForm(updated);
+      setEditDialogOpen(false);
+      snackbar("Property updated successfully");
+      window.location.reload();
+    } catch (err) {
+      snackbar("Failed to update property", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCaptionChange = useCallback(async (idx, caption) => {
+    try {
+      setCaptionLoading(prev => ({ ...prev, [idx]: true }));
+      const res = await fetchWithAuth(`${API_URL}/properties/${id}/images/${idx}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption })
+      });
+      if (!res.ok) throw new Error("Failed to update caption");
+      setProperty(await res.json());
+      snackbar("Caption updated successfully");
+      // Reload page to ensure fresh data
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (err) {
+      snackbar("Failed to update caption", "error");
+    } finally {
+      setCaptionLoading(prev => ({ ...prev, [idx]: false }));
+    }
+  }, [id, snackbar]);
+
+  const handleImageDelete = useCallback(async (idx) => {
+    try {
+      setDeleteLoading(prev => ({ ...prev, [idx]: true }));
+      const res = await fetchWithAuth(`${API_URL}/properties/${id}/images/${idx}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete image");
+      setProperty(await res.json());
+      snackbar("Image deleted successfully");
+    } catch (err) {
+      snackbar("Failed to delete image", "error");
+    } finally {
+      setDeleteLoading(prev => ({ ...prev, [idx]: false }));
+    }
+  }, [id, snackbar]);
+
+  const handlePhotoUpload = async (e) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    try {
+      setUploadLoading(true);
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) formData.append("images", files[i]);
+      const res = await fetchWithAuth(`${API_URL}/properties/${id}/images`, {
+        method: "POST",
+        body: formData
+      });
+      if (!res.ok) throw new Error("Failed to upload images");
+      setProperty(await res.json());
+      e.target.value = "";
+      window.location.reload();
+      snackbar("Photos uploaded successfully");
+    } catch (err) {
+      snackbar("Failed to upload photos", "error");
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const handleDeleteProperty = async () => {
+    try {
+      setDeletePropertyLoading(true);
+      const res = await fetchWithAuth(`${API_URL}/properties/${id}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Failed to delete property");
+      snackbar("Property deleted successfully");
+      navigate("/");
+    } catch (err) {
+      snackbar("Failed to delete property", "error");
+    } finally {
+      setDeletePropertyLoading(false);
+      setDeleteConfirmOpen(false);
+    }
+  };
+
+  if (!property) return <Box sx={{ textAlign: "center", p: 4 }}><CircularProgress /></Box>;
+
+  const nights = startDate && endDate ? dayjs(endDate).startOf("day").diff(dayjs(startDate).startOf("day"), "day") : 0;
+  const total = nights * (property.pricePerNight || 0);
+  
+  // Check if host has paid
+  const hostHasPaid = property.ownerHost?.hasPaid === true;
+
+  return (
+    <Box sx={{ maxWidth: 900, mx: "auto", p: 2 }}>
+      {/* Payment Warning for Guests */}
+      {!isOwner && !hostHasPaid && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Typography variant="body2" fontWeight="bold">This property is not available for booking</Typography>
+          <Typography variant="body2">The host has not completed payment verification.</Typography>
+        </Alert>
+      )}
+
+      {/* Owner Alerts */}
+      {isOwner && !property.isActive && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Typography variant="body2">Your property is inactive. Edit details and configure rooms & beds to activate.</Typography>
+            <Button size="small" startIcon={<EditIcon />} onClick={() => setEditDialogOpen(true)}>Edit</Button>
+          </Box>
+        </Alert>
+      )}
+
+      {isOwner && (
+        <Card sx={{ mb: 2, p: 2, bgcolor: property.isActive ? "#e8f5e9" : "#ffebee" }}>
+          <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={2}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                {property.isActive ? "✓ Property Active" : "⚠ Property Inactive"}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                {property.isActive ? "Your property is visible to guests and can receive bookings." : "Configure rooms and beds to activate your property."}
+              </Typography>
+            </Box>
+            <Button variant="contained" color={property.isActive ? "error" : "success"} onClick={handleToggleActive} disabled={loading || property.rooms.length === 0}>
+              {loading ? <CircularProgress size={24} /> : (property.isActive ? "Deactivate" : "Activate")}
+            </Button>
+          </Box>
+        </Card>
+      )}
+
+      {/* Property Title & Photos */}
+      <Typography variant="h4" mb={2}>{property.title}</Typography>
+      
+      {property.images?.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" mb={2}>Photo Gallery</Typography>
+          <Grid container spacing={2}>
+            {property.images.map((img, idx) => (
+              <Grid item xs={12} sm={6} md={4} key={idx}>
+                <PhotoTile imageUrl={`${BASE_URL}${img.path || img}`} caption={img.caption || ""} onCaptionChange={handleCaptionChange} onImageDelete={handleImageDelete} isOwner={isOwner} index={idx} captionLoading={captionLoading[idx]} deleteLoading={deleteLoading[idx]} />
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      {/* Photo Upload - Host Only */}
+      {isOwner && (
+        <Card sx={{ p: 2, mb: 3, bgcolor: "#f5f5f5", border: "2px dashed #1976d2" }}>
+          <Typography variant="h6" mb={2}>Upload Photos</Typography>
+          <Typography variant="body2" color="textSecondary" mb={2}>Add photos to your listing. You can add captions to describe each photo.</Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Input type="file" multiple inputProps={{ accept: "image/*" }} onChange={handlePhotoUpload} disabled={uploadLoading} sx={{ flex: 1 }} />
+            <Button variant="contained" startIcon={<CloudUploadIcon />} disabled={uploadLoading} component="label">
+              {uploadLoading ? "Uploading..." : "Upload"}
+              <input hidden type="file" multiple accept="image/*" onChange={handlePhotoUpload} disabled={uploadLoading} />
+            </Button>
+          </Box>
+          <Typography variant="caption" color="textSecondary" sx={{ display: "block", mt: 1 }}>JPG, PNG, GIF, WebP. Max 10MB each.</Typography>
+        </Card>
+      )}
+
+      <Typography variant="body1" mb={2}>{property.description}</Typography>
+
+      {/* Property Details */}
+      <Card sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" mb={1}>Property Details</Typography>
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+          <Box><Typography variant="caption" color="textSecondary">Type</Typography><Typography variant="body2">{property.type}</Typography></Box>
+          <Box><Typography variant="caption" color="textSecondary">Category</Typography><Typography variant="body2">{property.category || "..."}</Typography></Box>
+          <Box><Typography variant="caption" color="textSecondary">Location</Typography><Typography variant="body2">{property.city}, {property.country}</Typography></Box>
+          <Box><Typography variant="caption" color="textSecondary">Price/Night</Typography><Typography variant="body2">${property.pricePerNight || "..."}</Typography></Box>
+          <Box><Typography variant="caption" color="textSecondary">Max Guests</Typography><Typography variant="body2">{property.maxGuests || "..."}</Typography></Box>
+        </Box>
+      </Card>
+
+      {/* Facilities */}
+      {property.facilities?.length > 0 && (
+        <Card sx={{ p: 2, mb: 2 }}>
+          <Typography variant="h6" mb={1}>Facilities</Typography>
+          <Box display="flex" flexWrap="wrap" gap={1}>
+            {property.facilities.map((facility, idx) => <Chip key={idx} label={facility} variant="outlined" />)}
+          </Box>
+        </Card>
+      )}
+
+      {/* Rooms & Beds */}
+      {property.rooms?.length > 0 && (
+        <Card sx={{ p: 2, mb: 2 }}>
+          <Typography variant="h6" mb={2}>Rooms & Beds</Typography>
+          {property.rooms.map((room, roomIdx) => (
+            <Card key={roomIdx} sx={{ mb: 2, p: 2, bgcolor: "#f5f5f5" }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>{room.isPrivate ? "🔒 Private" : "🔓 Shared"} Room #{roomIdx + 1}</Typography>
+              <Box sx={{ pl: 2 }}>
+                {room.beds.map((bed, bedIdx) => (
+                  <Typography key={bedIdx} variant="body2">• {bed.label} - ${bed.pricePerBed}/night {bed.isAvailable ? "✓" : "✗"}</Typography>
+                ))}
+              </Box>
+            </Card>
+          ))}
+        </Card>
+      )}
+
+      {/* Availability Calendar Toggle & Display */}
+      <Card sx={{ p: 2, mb: 2 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={showCalendar ? 2 : 0}>
+          <Typography variant="h6">Availability</Typography>
+          <Button
+            variant={showCalendar ? "contained" : "outlined"}
+            startIcon={<CalendarMonthIcon />}
+            onClick={() => setShowCalendar(!showCalendar)}
+            size="small"
+          >
+            {showCalendar ? "Hide Calendar" : "Show Calendar"}
+          </Button>
+        </Box>
+        {showCalendar && <PropertyCalendar bookings={bookings} monthsToShow={3} />}
+      </Card>
+
+      {/* Booking Section */}
+      {property.isActive && !isOwner && currentUser && hostHasPaid && (
+        <Card sx={{ p: 2, mb: 2 }}>
+          <Typography variant="h6" mb={2}>Book This Property</Typography>
+          <Box display="flex" gap={2} alignItems="center" flexWrap="wrap" mb={2}>
+            <DatePicker label="Start" value={startDate} onChange={val => setStartDate(val ? dayjs(val) : null)} />
+            <DatePicker label="End" value={endDate} onChange={val => setEndDate(val ? dayjs(val) : null)} />
+            <Button variant="contained" onClick={handleBook}>Book</Button>
+          </Box>
+          {nights > 0 && <Typography variant="subtitle1">Total ({nights} nights): ${total}</Typography>}
+          {status && <Typography color={status.startsWith("Error") ? "error" : "success"}>{status}</Typography>}
+        </Card>
+      )}
+
+      {!property.isActive && !isOwner && (
+        <Alert severity="warning"><Typography variant="body2">This property is inactive and cannot be booked.</Typography></Alert>
+      )}
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Property</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <TextField fullWidth label="Title" name="title" value={editForm.title || ""} onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })} margin="normal" />
+          <TextField fullWidth label="Description" name="description" value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })} multiline rows={3} margin="normal" />
+          <TextField fullWidth label="Price/Night" name="pricePerNight" type="number" value={editForm.pricePerNight || ""} onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })} margin="normal" />
+          <TextField fullWidth label="Max Guests" name="maxGuests" type="number" value={editForm.maxGuests || ""} onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })} margin="normal" />
+          <TextField fullWidth select label="Category" name="category" value={editForm.category || ""} onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })} margin="normal">
+            {categories.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+          </TextField>
+          <RoomBedsConfigurator rooms={editForm.rooms || []} onChange={(rooms) => setEditForm({ ...editForm, rooms })} />
+          <Box sx={{ mt: 3, pt: 2, borderTop: "1px solid #eee" }}>
+            <Button fullWidth variant="outlined" color="error" onClick={() => setDeleteConfirmOpen(true)}>Delete Property</Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveEdit} variant="contained" disabled={loading}>{loading ? <CircularProgress size={24} /> : "Save"}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ color: "error.main", fontWeight: 600 }}>Delete Property</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>This action cannot be undone.</Typography>
+          </Alert>
+          <Typography variant="body2" paragraph>
+            Are you sure you want to permanently delete <strong>"{property.title}"</strong>? All photos, booking data, and property information will be removed.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={handleDeleteProperty} variant="contained" color="error" disabled={deletePropertyLoading}>
+            {deletePropertyLoading ? <CircularProgress size={24} /> : "Delete Property"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
