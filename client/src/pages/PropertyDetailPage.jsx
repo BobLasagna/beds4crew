@@ -43,6 +43,7 @@ export default function PropertyDetailPage() {
     totalPrice: 0,
     valid: false
   });
+  const [bookingLoading, setBookingLoading] = useState(false);
   const snackbar = useSnackbar();
   const navigate = useNavigate();
 
@@ -96,24 +97,52 @@ export default function PropertyDetailPage() {
       return;
     }
     
+    console.log("Starting booking request...");
+    setBookingLoading(true);
+    setStatus("");
+    
     try {
+      console.log("Sending booking data:", { 
+        propertyId: id, 
+        startDate, 
+        endDate,
+        bookedBeds: bookingSelection.bookedBeds,
+        totalPrice: bookingSelection.totalPrice
+      });
+      
       const res = await fetchWithAuth(`${API_URL}/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           propertyId: id, 
-          startDate, 
-          endDate,
+          startDate: startDate.format('YYYY-MM-DD'), 
+          endDate: endDate.format('YYYY-MM-DD'),
           bookedBeds: bookingSelection.bookedBeds,
           totalPrice: bookingSelection.totalPrice
         })
       });
+      
+      console.log("Booking response status:", res.status);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      console.log("Booking response data:", data);
+      
+      if (!res.ok) {
+        throw new Error(data.message || "Booking failed");
+      }
+      
+      console.log("Booking successful, navigating to trips...");
       snackbar("Booking successful!");
-      navigate("/trips");
+      
+      // Use setTimeout to ensure snackbar shows before navigation
+      setTimeout(() => {
+        navigate("/trips");
+      }, 100);
     } catch (err) {
+      console.error("Booking error:", err);
       setStatus(`Error: ${err.message}`);
+      snackbar(err.message || "Booking failed", "error");
+    } finally {
+      setBookingLoading(false);
     }
   };
 
@@ -520,9 +549,15 @@ export default function PropertyDetailPage() {
               onClick={handleBook} 
               fullWidth 
               sx={{ mt: 2 }}
-              disabled={!bookingSelection.valid}
+              disabled={!bookingSelection.valid || bookingLoading}
             >
-              {bookingSelection.valid ? `Book Now - $${bookingSelection.totalPrice}` : 'Complete Selection to Book'}
+              {bookingLoading ? (
+                <CircularProgress size={24} sx={{ color: 'white' }} />
+              ) : bookingSelection.valid ? (
+                `Book Now - $${bookingSelection.totalPrice}`
+              ) : (
+                'Complete Selection to Book'
+              )}
             </Button>
           )}
           
