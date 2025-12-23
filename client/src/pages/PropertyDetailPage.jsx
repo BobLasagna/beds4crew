@@ -10,6 +10,7 @@ import RoomBedsConfigurator from "../components/RoomBedsConfigurator";
 import PhotoTile from "../components/PhotoTile";
 import PropertyCalendar from "../components/PropertyCalendar";
 import BlockPeriodManager from "../components/BlockPeriodManager";
+import BedSelector from "../components/BedSelector";
 import { commonStyles } from "../utils/styleConstants";
 import EditIcon from "@mui/icons-material/Edit";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -36,6 +37,12 @@ export default function PropertyDetailPage() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletePropertyLoading, setDeletePropertyLoading] = useState(false);
+  const [bookingSelection, setBookingSelection] = useState({
+    bookedBeds: [],
+    guestCount: 0,
+    totalPrice: 0,
+    valid: false
+  });
   const snackbar = useSnackbar();
   const navigate = useNavigate();
 
@@ -79,12 +86,27 @@ export default function PropertyDetailPage() {
       return;
     }
     
-    if (!startDate || !endDate) return setStatus("Please select valid dates");
+    if (!startDate || !endDate) {
+      setStatus("Please select valid dates");
+      return;
+    }
+
+    if (!bookingSelection.valid) {
+      setStatus("Please complete the booking details");
+      return;
+    }
+    
     try {
       const res = await fetchWithAuth(`${API_URL}/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propertyId: id, startDate, endDate })
+        body: JSON.stringify({ 
+          propertyId: id, 
+          startDate, 
+          endDate,
+          bookedBeds: bookingSelection.bookedBeds,
+          totalPrice: bookingSelection.totalPrice
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
@@ -247,7 +269,6 @@ export default function PropertyDetailPage() {
   if (!property) return <LoadingState message="Loading property details..." />;
 
   const nights = startDate && endDate ? dayjs(endDate).startOf("day").diff(dayjs(startDate).startOf("day"), "day") : 0;
-  const total = nights * (property.pricePerNight || 0);
   
   // Check if host has paid
   const hostHasPaid = property.ownerHost?.hasPaid === true;
@@ -461,15 +482,55 @@ export default function PropertyDetailPage() {
       {property.isActive && !isOwner && currentUser && hostHasPaid && (
         <Card sx={{ ...commonStyles.sectionSpacing, p: { xs: 2, sm: 3 } }}>
           <Typography variant="h6" sx={commonStyles.sectionTitle}>Book This Property</Typography>
-          <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} gap={2} alignItems={{ xs: "stretch", sm: "center" }} flexWrap="wrap" mb={2}>
-            <DatePicker label="Start" value={startDate} onChange={val => setStartDate(val ? dayjs(val) : null)} />
-            <DatePicker label="End" value={endDate} onChange={val => setEndDate(val ? dayjs(val) : null)} />
-            <Button variant="contained" onClick={handleBook} fullWidth={false} sx={{ minWidth: { xs: "100%", sm: "auto" } }}>
-              Book
-            </Button>
+          
+          <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} gap={2} mb={3}>
+            <DatePicker 
+              label="Check-in" 
+              value={startDate} 
+              onChange={val => {
+                setStartDate(val ? dayjs(val) : null);
+                setStatus("");
+              }}
+              minDate={dayjs()}
+            />
+            <DatePicker 
+              label="Check-out" 
+              value={endDate} 
+              onChange={val => {
+                setEndDate(val ? dayjs(val) : null);
+                setStatus("");
+              }}
+              minDate={startDate ? dayjs(startDate).add(1, 'day') : dayjs().add(1, 'day')}
+            />
           </Box>
-          {nights > 0 && <Typography variant="subtitle1">Total ({nights} nights): ${total}</Typography>}
-          {status && <Typography color={status.startsWith("Error") ? "error" : "success"}>{status}</Typography>}
+
+          {startDate && endDate && nights > 0 && (
+            <BedSelector
+              property={property}
+              startDate={startDate}
+              endDate={endDate}
+              existingBookings={bookings}
+              onSelectionChange={setBookingSelection}
+            />
+          )}
+
+          {startDate && endDate && nights > 0 && (
+            <Button 
+              variant="contained" 
+              onClick={handleBook} 
+              fullWidth 
+              sx={{ mt: 2 }}
+              disabled={!bookingSelection.valid}
+            >
+              {bookingSelection.valid ? `Book Now - $${bookingSelection.totalPrice}` : 'Complete Selection to Book'}
+            </Button>
+          )}
+          
+          {status && (
+            <Alert severity={status.startsWith("Error") ? "error" : "info"} sx={{ mt: 2 }}>
+              {status}
+            </Alert>
+          )}
         </Card>
       )}
 

@@ -9,7 +9,7 @@ const router = express.Router();
 // Create a new booking (guest only) - starts as "pending"
 router.post("/", verifyToken, async (req, res) => {
   try {
-    const { propertyId, startDate, endDate, bookedBeds } = req.body;
+    const { propertyId, startDate, endDate, bookedBeds, totalPrice } = req.body;
     
     // Validate date range
     const dateValidation = validateDateRange(startDate, endDate);
@@ -25,22 +25,24 @@ router.post("/", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "This property is not available for booking. Need help? Contact support." });
     }
 
-    // Calculate nights and price
+    // Calculate nights
     const start = new Date(startDate).setHours(0,0,0,0);
     const end = new Date(endDate).setHours(0,0,0,0);
     const nights = Math.floor((end - start) / (1000 * 60 * 60 * 24));
     
-    // Calculate total price based on specific beds or property price
-    let totalPrice;
-    if (bookedBeds && bookedBeds.length > 0) {
-      // Calculate based on specific beds
-      totalPrice = bookedBeds.reduce((sum, bed) => {
-        const room = property.rooms[bed.roomIndex];
-        const bedData = room?.beds[bed.bedIndex];
-        return sum + (bedData?.pricePerBed || 0);
-      }, 0) * nights;
-    } else {
-      totalPrice = nights * property.pricePerNight;
+    // Use totalPrice from request (already calculated by BedSelector)
+    // If not provided, calculate it as fallback
+    let finalPrice = totalPrice;
+    if (!finalPrice) {
+      if (bookedBeds && bookedBeds.length > 0) {
+        finalPrice = bookedBeds.reduce((sum, bed) => {
+          const room = property.rooms[bed.roomIndex];
+          const bedData = room?.beds[bed.bedIndex];
+          return sum + (bedData?.pricePerBed || 0);
+        }, 0) * nights;
+      } else {
+        finalPrice = nights * property.pricePerNight;
+      }
     }
 
     // Check if specific beds are already booked
@@ -83,7 +85,7 @@ router.post("/", verifyToken, async (req, res) => {
       host: property.ownerHost,
       startDate, 
       endDate, 
-      totalPrice,
+      totalPrice: finalPrice,
       status: "pending",
       bookedBeds: bookedBeds || []
     });
