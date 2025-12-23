@@ -142,7 +142,7 @@ export default function SupportPage() {
         </Box>
 
         {/* Admin Controls */}
-        {user && 0 && (
+        {user && 0 ? (
           <>
             <Divider sx={{ my: 4 }} />
             <Typography variant="h6" gutterBottom align="center" color="text.secondary">
@@ -189,7 +189,7 @@ export default function SupportPage() {
               </Button>
             </Box>
           </>
-        )}
+        ) : <></>}
       </Paper>
     </Container>
   );

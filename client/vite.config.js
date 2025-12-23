@@ -29,7 +29,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // Listen on all network interfaces
     port: 5173,
-    open: false
+    open: false,
+    // This ensures all routes fall back to index.html for client-side routing
+    historyApiFallback: true
   },
   preview: {
     port: 5173,
