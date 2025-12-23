@@ -1,4 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+// In production (Render), use relative URLs since frontend and backend are on same domain
+// In development, use localhost
+const API_URL = import.meta.env.VITE_API_URL || 
+  (import.meta.env.MODE === 'production' ? '/api' : 'http://localhost:3001/api');
 export const BASE_URL = API_URL.replace('/api', ''); // Base URL without /api
 export { API_URL };
 
