@@ -19,8 +19,23 @@ async function reverseGeocode([lat, lng]) {
     console.log("No address features data found");
     return {};
   }
-  const {city, country, name: address} = data.features[0].properties
-  return {city, country, address};
+  
+  const props = data.features[0].properties;
+  
+  // Extract city with fallbacks
+  const city = props.city || props.town || props.village || props.county || props.state || "";
+  
+  // Extract country
+  const country = props.country || "";
+  
+  // Extract address with fallbacks
+  const address = props.name || props.street || props.housenumber 
+    ? `${props.housenumber || ''} ${props.street || props.name || ''}`.trim()
+    : props.display_name || "";
+  
+  console.log('Reverse geocode result:', { city, country, address, rawProps: props });
+  
+  return { city, country, address };
 }
 
 const categories = ["apartment", "condo", "house", "hostel", "flat", "villa"];
@@ -147,8 +162,32 @@ export default function AddPropertyPage() {
       setError("Please add at least one room with beds to activate your property.");
       return;
     }
+    
+    // Validate city and country are present
+    if (!form.city || !form.country) {
+      setError("City and country information is required. Please try selecting a different location on the map.");
+      return;
+    }
+    
     setAddressError("");
     const data = new FormData();
+    
+    // Debug: Log what we're sending
+    console.log("Form data being sent:", {
+      title: form.title,
+      type: form.type,
+      category: form.category,
+      description: form.description,
+      pricePerNight: form.pricePerNight,
+      city: form.city,
+      country: form.country,
+      address: form.address,
+      maxGuests: form.maxGuests,
+      facilities: form.facilities,
+      rooms: form.rooms,
+      imageCount: form.images.length
+    });
+    
     Object.entries(form).forEach(([key, val]) => {
       if (key === "images") for (let file of val) data.append("images", file);
       else if (key === "facilities") data.append("facilities", val.join(","));
@@ -161,12 +200,18 @@ export default function AddPropertyPage() {
         method: "POST",
         body: data
       });
-      // console.log('Server response:', res);
-      if (!res.ok) 
-        throw new Error("Failed to save property");
+      
+      // Try to get error message from response
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Server error response:", errorData);
+        throw new Error(errorData.message || "Failed to save property");
+      }
+      
       snackbar("Property added successfully");
       navigate("/");
     } catch (err) {
+      console.error("Error creating property:", err);
       snackbar("Failed to save property", "error");
       setError(err.message);
     }
