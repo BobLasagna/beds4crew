@@ -54,9 +54,9 @@ mongoose.connection.on("error", (err) => {
   console.error("MongoDB connection error:", err);
 });
 
-// Basic test route
+// Basic test route - redirect to frontend
 app.get("/", (req, res) => {
-  res.json({ message: "Welcome to Beds4Crew API" });
+  res.redirect("https://beds4crew-gqib.onrender.com/");
 });
 
 // 404 handler
