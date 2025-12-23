@@ -4,7 +4,24 @@
     box-sizing: border-box;
     font-family: 'Nunito', sans-serif;
 }
+
+body {
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
 .leaflet-container {
     width: 100%;
     height: 50vh; /* adjust as needed */
-  }
+}
+
+/* Dark mode support for leaflet maps */
+[data-theme="dark"] .leaflet-tile-pane {
+    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}
+
+[data-theme="dark"] .leaflet-layer,
+[data-theme="dark"] .leaflet-control-zoom-in,
+[data-theme="dark"] .leaflet-control-zoom-out,
+[data-theme="dark"] .leaflet-control-attribution {
+    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}

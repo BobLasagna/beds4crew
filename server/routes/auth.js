@@ -23,8 +23,11 @@ router.post("/register", uploadSingle, async (req, res) => {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
+    // Normalize email to lowercase for case-insensitive comparison
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Check if user already exists by email
-    const existingUserEmail = await User.findOne({ email });
+    const existingUserEmail = await User.findOne({ email: normalizedEmail });
     if (existingUserEmail) {
       return res.status(409).json({ message: "User email already in use" });
     }
@@ -44,7 +47,7 @@ router.post("/register", uploadSingle, async (req, res) => {
       firstName: sanitizeInput(firstName),
       lastName: sanitizeInput(lastName),
       phone: sanitizeInput(phone),
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       profileImagePath,
       role: role || "guest",
@@ -82,17 +85,20 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Normalize email to lowercase for case-insensitive comparison
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Lookup user with lean query for better performance
-    const user = await User.findOne({ email }).lean();
+    const user = await User.findOne({ email: normalizedEmail }).lean();
     if (!user) {
-      console.log(`Login attempt failed: User not found for email ${email}`);
+      console.log(`Login attempt failed: User not found for email ${normalizedEmail}`);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
     // Password comparison
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log(`Login attempt failed: Invalid password for email ${email}`);
+      console.log(`Login attempt failed: Invalid password for email ${normalizedEmail}`);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
@@ -107,7 +113,7 @@ router.post("/login", async (req, res) => {
     });
     await refreshTokenDoc.save();
 
-    console.log(`✅ User logged in successfully: ${email}`);
+    console.log(`✅ User logged in successfully: ${normalizedEmail}`);
 
     // Return tokens + user info
     return res.json({

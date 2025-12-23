@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Drawer, List, ListItemButton, ListItemIcon, ListItemText, IconButton, Divider, Toolbar, AppBar, Typography, Box } from "@mui/material";
+import { Drawer, List, ListItemButton, ListItemIcon, ListItemText, IconButton, Divider, Toolbar, AppBar, Typography, Box, Button } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import HomeIcon from "@mui/icons-material/Home";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
@@ -11,9 +11,12 @@ import PublicIcon from "@mui/icons-material/Public";
 import LogoutIcon from "@mui/icons-material/Logout";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import SupportIcon from "@mui/icons-material/Support";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { logout } from "../utils/api";
+import { useThemeMode } from "../contexts/ThemeContext";
 
 const drawerWidth = 220;
 
@@ -32,6 +35,7 @@ export default function NavigationDrawer({ children }) {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { mode, toggleTheme } = useThemeMode();
 
   const handleLogout = async () => {
     await logout();
@@ -104,6 +108,37 @@ export default function NavigationDrawer({ children }) {
           <ListItemIcon><SupportIcon /></ListItemIcon>
           <ListItemText primary="Support" />
         </ListItemButton>
+
+        <Divider sx={{ my: 1 }} />
+        
+        {/* Theme Toggle Button */}
+        <ListItemButton 
+          onClick={toggleTheme}
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            py: 1.5,
+          }}
+        >
+          <Button
+            variant="contained"
+            startIcon={mode === 'light' ? <DarkModeIcon /> : <LightModeIcon />}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleTheme();
+            }}
+            sx={{
+              width: '100%',
+              backgroundColor: mode === 'light' ? '#1e1e1e' : '#ffffff',
+              color: mode === 'light' ? '#ffffff' : '#000000',
+              '&:hover': {
+                backgroundColor: mode === 'light' ? '#2d2d2d' : '#e0e0e0',
+              },
+            }}
+          >
+            {mode === 'light' ? 'Dark Mode' : 'Light Mode'}
+          </Button>
+        </ListItemButton>
         
         <ListItemButton onClick={handleLogout}>
           <ListItemIcon><LogoutIcon /></ListItemIcon>
@@ -121,7 +156,7 @@ export default function NavigationDrawer({ children }) {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Property Rental Platform
+            Beds4Crew&copy;
           </Typography>
           {isEmpty(user) && (
             <IconButton color="inherit" edge="end" onClick={() => navigate("/login")}>
