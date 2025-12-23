@@ -68,6 +68,15 @@ export default function PropertyDetailPage() {
   }, [currentUser, property]);
 
   const handleBook = async () => {
+    // Check if user is logged in
+    if (!currentUser || !currentUser.id) {
+      snackbar("Must be logged in to book", "warning");
+      // Save the current property URL to redirect back after login
+      localStorage.setItem("redirectAfterLogin", `/property/${id}`);
+      navigate("/login");
+      return;
+    }
+    
     if (!startDate || !endDate) return setStatus("Please select valid dates");
     try {
       const res = await fetchWithAuth(`${API_URL}/bookings`, {

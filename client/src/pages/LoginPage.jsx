@@ -34,7 +34,15 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
 
       snackbar("Login successful");
-      navigate("/");
+      
+      // Check if there's a redirect URL saved (from trying to book a property)
+      const redirectUrl = localStorage.getItem("redirectAfterLogin");
+      if (redirectUrl) {
+        localStorage.removeItem("redirectAfterLogin"); // Clear it after use
+        navigate(redirectUrl);
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       snackbar("Login failed", "error");
       setError(err.message);
