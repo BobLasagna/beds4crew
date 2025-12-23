@@ -82,34 +82,29 @@ app.get("/", (req, res) => {
   // res.redirect("https://beds4crew-gqib.onrender.com/");
 });
 
-// SPA fallback - serve index.html for all non-API routes
-// This MUST come after all API routes and before the 404 handler
-app.get("/*", (req, res, next) => {
-  // Only handle non-API routes
-  if (req.path.startsWith("/api/")) {
-    return next();
-  }
-  
-  // Try to serve from public/uploads for image requests
-  if (req.path.startsWith("/uploads/")) {
-    return next();
-  }
-  
-  // For all other routes, serve index.html (for React Router)
-  const indexPath = path.join(__dirname, "../client/dist/index.html");
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      // If client build doesn't exist, return a helpful message
-      res.status(404).json({ 
-        message: "Client app not built. Run 'npm run build' in the client directory." 
-      });
-    }
-  });
+// 404 handler for API routes
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ message: "API route not found" });
 });
+
+// For all other routes, express.static will serve the React app
+// If no file matches, it will fall through to the next handler
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+  // If we're here and it's not an API route, serve index.html for client-side routing
+  if (!req.path.startsWith("/api/")) {
+    const indexPath = path.join(__dirname, "../client/dist/index.html");
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        res.status(404).json({ 
+          message: "Client app not built. Run 'npm run build' in the client directory." 
+        });
+      }
+    });
+  } else {
+    res.status(404).json({ message: "Route not found" });
+  }
 });
 
 // Global error handler
