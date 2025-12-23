@@ -96,6 +96,13 @@ export default function MapView({
     ];
   };
 
+  console.log('MapView render:', {
+    properties: properties.length,
+    groupedMarkers: groupedMarkers.length,
+    center,
+    radius
+  });
+
   return (
     <MapContainer
       center={mapCenter}
@@ -124,108 +131,122 @@ export default function MapView({
       />
 
       {/* Render grouped markers */}
-      {groupedMarkers.map((group, groupIdx) => {
-        if (group.length === 1) {
-          // Single property - show basic info
-          const prop = group[0];
-          const position = getObfuscatedPosition(prop, 0);
+      {groupedMarkers && groupedMarkers.length > 0 ? (
+        groupedMarkers.map((group, groupIdx) => {
+          if (!group || group.length === 0) return null;
+          
+          if (group.length === 1) {
+            // Single property - show basic info
+            const prop = group[0];
+            if (!prop.latitude || !prop.longitude) {
+              console.warn('Property missing coordinates:', prop._id);
+              return null;
+            }
+            const position = getObfuscatedPosition(prop, 0);
 
-          return (
-            <Marker
-              key={`single-${prop._id}`}
-              position={position}
-              icon={createMarkerIcon()}
-            >
-              <Popup closeButton={true}>
-                <Box sx={{ minWidth: '220px' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                    {prop.title}
-                  </Typography>
-                  <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                    {prop.address}
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#2E7D32', mb: 1 }}>
-                    ${prop.pricePerNight}/night
-                  </Typography>
-                  <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                    {prop.category} • {prop.type}
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    fullWidth
-                    onClick={() => onPropertyClick(prop._id)}
-                    sx={{ mt: 1 }}
-                  >
-                    View Details
-                  </Button>
-                </Box>
-              </Popup>
-            </Marker>
-          );
-        } else {
-          // Multiple properties in cluster - show cluster count
-          const clusterCenter = group[0]; // Use first property's location as cluster center
-          const position = getObfuscatedPosition(clusterCenter, groupIdx);
+            return (
+              <Marker
+                key={`single-${prop._id}`}
+                position={position}
+                icon={createMarkerIcon()}
+              >
+                <Popup closeButton={true}>
+                  <Box sx={{ minWidth: '220px' }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                      {prop.title}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                      {prop.address}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#2E7D32', mb: 1 }}>
+                      ${prop.pricePerNight}/night
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                      {prop.category} • {prop.type}
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      fullWidth
+                      onClick={() => onPropertyClick(prop._id)}
+                      sx={{ mt: 1 }}
+                    >
+                      View Details
+                    </Button>
+                  </Box>
+                </Popup>
+              </Marker>
+            );
+          } else {
+            // Multiple properties in cluster - show cluster count
+            const clusterCenter = group[0]; // Use first property's location as cluster center
+            if (!clusterCenter.latitude || !clusterCenter.longitude) {
+              console.warn('Cluster center missing coordinates:', clusterCenter._id);
+              return null;
+            }
+            const position = getObfuscatedPosition(clusterCenter, groupIdx);
 
-          return (
-            <Marker
-              key={`cluster-${groupIdx}`}
-              position={position}
-              icon={createClusterIcon(group.length)}
-            >
-              <Popup closeButton={true}>
-                <Box sx={{ minWidth: '280px', maxHeight: '400px', overflowY: 'auto' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                    {group.length} properties in this area
-                  </Typography>
-                  <List sx={{ p: 0 }}>
-                    {group.map((prop, idx) => (
-                      <ListItem
-                        key={prop._id}
-                        sx={{
-                          p: 1,
-                          mb: 1,
-                          bgcolor: '#f5f5f5',
-                          borderRadius: '4px',
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                        }}
-                      >
-                        <Box sx={{ width: '100%' }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                            {prop.title}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 0.5 }}>
-                            {prop.address}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#2E7D32', mb: 0.5 }}
-                          >
-                            ${prop.pricePerNight}/night
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                            {prop.category} • {prop.type}
-                          </Typography>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={() => onPropertyClick(prop._id)}
-                            sx={{ mt: 0.5, width: '100%' }}
-                          >
-                            View
-                          </Button>
-                        </Box>
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              </Popup>
-            </Marker>
-          );
-        }
-      })}
+            return (
+              <Marker
+                key={`cluster-${groupIdx}`}
+                position={position}
+                icon={createClusterIcon(group.length)}
+              >
+                <Popup closeButton={true}>
+                  <Box sx={{ minWidth: '280px', maxHeight: '400px', overflowY: 'auto' }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                      {group.length} properties in this area
+                    </Typography>
+                    <List sx={{ p: 0 }}>
+                      {group.map((prop, idx) => (
+                        <ListItem
+                          key={prop._id}
+                          sx={{
+                            p: 1,
+                            mb: 1,
+                            bgcolor: '#f5f5f5',
+                            borderRadius: '4px',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <Box sx={{ width: '100%' }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                              {prop.title}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 0.5 }}>
+                              {prop.address}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 600, color: '#2E7D32', mb: 0.5 }}
+                            >
+                              ${prop.pricePerNight}/night
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                              {prop.category} • {prop.type}
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => onPropertyClick(prop._id)}
+                              sx={{ mt: 0.5, width: '100%' }}
+                            >
+                              View
+                            </Button>
+                          </Box>
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Box>
+                </Popup>
+              </Marker>
+            );
+          }
+        })
+      ) : (
+        <Box />
+      )}
     </MapContainer>
   );
 }
