@@ -9,7 +9,7 @@ import { fetchWithAuth, API_URL, BASE_URL } from "../utils/api";
 export default function TripListPage() {
   const [bookings, setBookings] = useState([]);
   const [selectedBooking, setSelectedBooking] = useState(null);
-`  const [messageText, setMessageText] = useState("");
+  const [messageText, setMessageText] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
