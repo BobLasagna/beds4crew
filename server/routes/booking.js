@@ -157,28 +157,13 @@ router.put("/:id/confirm", verifyToken, async (req, res) => {
     if (booking.bookedBeds && booking.bookedBeds.length > 0) {
       const property = await Property.findById(booking.property._id);
       
-      // First, validate that all beds are still available
-      for (const bookedBed of booking.bookedBeds) {
-        const room = property.rooms[bookedBed.roomIndex];
-        const bed = room?.beds[bookedBed.bedIndex];
-        
-        if (!bed) {
-          return res.status(400).json({ 
-            message: `Invalid bed reference: Room ${bookedBed.roomIndex}, Bed ${bookedBed.bedIndex}` 
-          });
-        }
-        
-        if (!bed.isAvailable) {
-          return res.status(409).json({ 
-            message: `Bed "${bed.label}" in Room #${bookedBed.roomIndex + 1} is no longer available. Another booking may have been confirmed.` 
-          });
-        }
-      }
-      
-      // All beds are available, now mark them as unavailable
       booking.bookedBeds.forEach(bookedBed => {
-        const bed = property.rooms[bookedBed.roomIndex].beds[bookedBed.bedIndex];
-        bed.isAvailable = false;
+        if (property.rooms[bookedBed.roomIndex]) {
+          const bed = property.rooms[bookedBed.roomIndex].beds[bookedBed.bedIndex];
+          if (bed) {
+            bed.isAvailable = false;
+          }
+        }
       });
       
       await property.save();
@@ -356,6 +341,35 @@ router.get("/unread/count", verifyToken, async (req, res) => {
     res.json({ unreadCount });
   } catch (error) {
     res.status(500).json({ message: "Failed to get unread count", error: error.message });
+  }
+});
+
+// Mark booking as read by current user
+router.put("/:id/mark-read", verifyToken, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+    
+    // Only guest or host can mark as read
+    if (booking.guest.toString() !== req.user.id && booking.host.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+    
+    // Mark as read for the current user
+    if (booking.guest.toString() === req.user.id) {
+      booking.unreadByGuest = false;
+    } else if (booking.host.toString() === req.user.id) {
+      booking.unreadByHost = false;
+    }
+    
+    await booking.save();
+    
+    res.json({ message: "Marked as read", booking });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to mark as read", error: error.message });
   }
 });
 

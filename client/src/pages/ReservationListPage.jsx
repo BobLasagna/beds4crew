@@ -33,6 +33,15 @@ export default function ReservationListPage() {
     const booking = await res.json();
     setSelectedBooking(booking);
     setDialogOpen(true);
+    
+    // Mark as read by host
+    if (booking.unreadByHost) {
+      await fetchWithAuth(`${API_URL}/bookings/${bookingId}/mark-read`, {
+        method: "PUT"
+      });
+      // Refresh bookings to update badge
+      loadBookings();
+    }
   };
 
   const handleConfirmBooking = async (bookingId) => {
@@ -130,13 +139,6 @@ export default function ReservationListPage() {
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
                       {bk.property?.title || 'Property'}
-                      {bk.unreadByHost && (
-                        <Badge 
-                          badgeContent="new" 
-                          color="error" 
-                          sx={{ ml: 1, '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
-                        />
-                      )}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Guest: {bk.guest?.firstName} {bk.guest?.lastName}
@@ -184,6 +186,13 @@ export default function ReservationListPage() {
                         onClick={() => handleOpenDialog(bk._id)}
                       >
                         Message Guest
+                        {bk.unreadByHost && (
+                          <Badge 
+                            badgeContent="new" 
+                            color="error" 
+                            sx={{ ml: 1, '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
+                          />
+                        )}
                       </Button>
                     </Box>
                   </CardContent>
@@ -242,6 +251,13 @@ export default function ReservationListPage() {
                       fullWidth
                     >
                       View Details & Message
+                      {bk.unreadByHost && (
+                        <Badge 
+                          badgeContent="new" 
+                          color="error" 
+                          sx={{ ml: 1, '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
+                        />
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
@@ -355,8 +371,8 @@ export default function ReservationListPage() {
                   {selectedBooking.messages.map((msg, idx) => (
                     <ListItem key={idx} alignItems="flex-start">
                       <ListItemAvatar>
-                        <Avatar>
-                          <PersonIcon />
+                        <Avatar src={msg.sender?.profileImagePath ? `${BASE_URL}${msg.sender.profileImagePath}` : undefined}>
+                          {!msg.sender?.profileImagePath && <PersonIcon />}
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText

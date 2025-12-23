@@ -33,6 +33,15 @@ export default function TripListPage() {
     const booking = await res.json();
     setSelectedBooking(booking);
     setDialogOpen(true);
+    
+    // Mark as read by guest
+    if (booking.unreadByGuest) {
+      await fetchWithAuth(`${API_URL}/bookings/${bookingId}/mark-read`, {
+        method: "PUT"
+      });
+      // Refresh bookings to update badge
+      loadBookings();
+    }
   };
 
   const handleSendMessage = async () => {
@@ -96,13 +105,6 @@ export default function TripListPage() {
                 <CardContent sx={{ flexGrow: 1 }}>
                   <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
                     {bk.property.title}
-                    {bk.unreadByGuest && (
-                      <Badge 
-                        badgeContent="new" 
-                        color="error" 
-                        sx={{ ml: 1, '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
-                      />
-                    )}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     {bk.property.address}
@@ -132,6 +134,13 @@ export default function TripListPage() {
                       onClick={() => handleOpenDialog(bk._id)}
                     >
                       View Details & Message
+                      {bk.unreadByGuest && (
+                        <Badge 
+                          badgeContent="new" 
+                          color="error" 
+                          sx={{ ml: 1, '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
+                        />
+                      )}
                     </Button>
                     {(bk.status === "pending" || bk.status === "confirmed") && (
                       <Button 
@@ -194,8 +203,8 @@ export default function TripListPage() {
                   {selectedBooking.messages.map((msg, idx) => (
                     <ListItem key={idx} alignItems="flex-start">
                       <ListItemAvatar>
-                        <Avatar>
-                          <PersonIcon />
+                        <Avatar src={msg.sender?.profileImagePath ? `${BASE_URL}${msg.sender.profileImagePath}` : undefined}>
+                          {!msg.sender?.profileImagePath && <PersonIcon />}
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText

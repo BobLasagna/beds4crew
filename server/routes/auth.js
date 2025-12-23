@@ -222,6 +222,73 @@ router.put("/profile", verifyToken, async (req, res) => {
   }
 });
 
+// Upload or replace profile photo
+router.post("/profile/photo", verifyToken, uploadSingle, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const newProfileImagePath = `/uploads/${req.file.filename}`;
+    
+    // Get user's old profile image path
+    const user = await User.findById(req.user.id);
+    const oldProfileImagePath = user.profileImagePath;
+
+    // Update user's profile image path
+    user.profileImagePath = newProfileImagePath;
+    await user.save();
+
+    // Delete old profile image if it exists
+    if (oldProfileImagePath) {
+      const fs = require('fs');
+      const path = require('path');
+      const oldFilePath = path.join(__dirname, '..', 'public', oldProfileImagePath);
+      
+      fs.unlink(oldFilePath, (err) => {
+        if (err) console.error("Failed to delete old profile image:", err);
+      });
+    }
+
+    res.json({ 
+      message: "Profile photo updated successfully",
+      profileImagePath: newProfileImagePath 
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to upload profile photo", error: error.message });
+  }
+});
+
+// Remove profile photo
+router.delete("/profile/photo", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user.profileImagePath) {
+      return res.status(400).json({ message: "No profile photo to remove" });
+    }
+
+    const oldProfileImagePath = user.profileImagePath;
+
+    // Remove profile image path from user
+    user.profileImagePath = "";
+    await user.save();
+
+    // Delete the file from disk
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '..', 'public', oldProfileImagePath);
+    
+    fs.unlink(filePath, (err) => {
+      if (err) console.error("Failed to delete profile image file:", err);
+    });
+
+    res.json({ message: "Profile photo removed successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to remove profile photo", error: error.message });
+  }
+});
+
 // Get current user's data (including wishlist)
 router.get("/me", verifyToken, async (req, res) => {
   try {
