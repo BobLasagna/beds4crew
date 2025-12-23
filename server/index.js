@@ -84,7 +84,7 @@ app.get("/", (req, res) => {
 
 // SPA fallback - serve index.html for all non-API routes
 // This MUST come after all API routes and before the 404 handler
-app.get("*", (req, res, next) => {
+app.get("/*", (req, res, next) => {
   // Only handle non-API routes
   if (req.path.startsWith("/api/")) {
     return next();
