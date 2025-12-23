@@ -11,13 +11,22 @@ const app = express();
 app.use(compression()); // Compress all responses
 app.use(express.json({ limit: "10mb" })); // Add size limit
 
-// Configure CORS to allow requests from any device on your network
-app.use(cors({
-  origin: true, // Allow all origins (for local network testing)
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Configure CORS based on environment
+const corsOptions = process.env.NODE_ENV === 'production'
+  ? {
+      // Production: Allow same-origin requests (no CORS needed since API and client are on same domain)
+      origin: false, // Disable CORS since we're serving from same origin
+      credentials: true
+    }
+  : {
+      // Development: Allow all origins for local network testing
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization']
+    };
+
+app.use(cors(corsOptions));
 
 // Serve uploaded files
 app.use(express.static("public"));
