@@ -157,13 +157,28 @@ router.put("/:id/confirm", verifyToken, async (req, res) => {
     if (booking.bookedBeds && booking.bookedBeds.length > 0) {
       const property = await Property.findById(booking.property._id);
       
-      booking.bookedBeds.forEach(bookedBed => {
-        if (property.rooms[bookedBed.roomIndex]) {
-          const bed = property.rooms[bookedBed.roomIndex].beds[bookedBed.bedIndex];
-          if (bed) {
-            bed.isAvailable = false;
-          }
+      // First, validate that all beds are still available
+      for (const bookedBed of booking.bookedBeds) {
+        const room = property.rooms[bookedBed.roomIndex];
+        const bed = room?.beds[bookedBed.bedIndex];
+        
+        if (!bed) {
+          return res.status(400).json({ 
+            message: `Invalid bed reference: Room ${bookedBed.roomIndex}, Bed ${bookedBed.bedIndex}` 
+          });
         }
+        
+        if (!bed.isAvailable) {
+          return res.status(409).json({ 
+            message: `Bed "${bed.label}" in Room #${bookedBed.roomIndex + 1} is no longer available. Another booking may have been confirmed.` 
+          });
+        }
+      }
+      
+      // All beds are available, now mark them as unavailable
+      booking.bookedBeds.forEach(bookedBed => {
+        const bed = property.rooms[bookedBed.roomIndex].beds[bookedBed.bedIndex];
+        bed.isAvailable = false;
       });
       
       await property.save();
