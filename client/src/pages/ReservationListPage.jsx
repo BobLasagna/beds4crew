@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { 
   Box, Typography, Card, CardContent, CardMedia, Grid, Chip, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, List,
-  ListItem, ListItemText, Divider, Alert, Avatar, ListItemAvatar
+  ListItem, ListItemText, Divider, Alert, Avatar, ListItemAvatar, Badge
 } from "@mui/material";
 import PersonIcon from "@mui/icons-material/Person";
 import { LoadingState, NoReservations } from "../components/EmptyState";
@@ -130,6 +130,13 @@ export default function ReservationListPage() {
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }}>
                       {bk.property?.title || 'Property'}
+                      {bk.unreadByHost && (
+                        <Badge 
+                          badgeContent="new" 
+                          color="error" 
+                          sx={{ ml: 1, '& .MuiBadge-badge': { fontSize: '0.6rem' } }}
+                        />
+                      )}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Guest: {bk.guest?.firstName} {bk.guest?.lastName}

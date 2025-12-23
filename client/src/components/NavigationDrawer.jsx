@@ -21,38 +21,52 @@ import { useThemeMode } from "../contexts/ThemeContext";
 const drawerWidth = 220;
 
 function isEmpty(obj) {
-  // First, check if the object is null or undefined
   if (obj === null || typeof obj === 'undefined') {
-    return false; // It exists, just not as an object (or it's null/undefined)
+    return false;
   }
-  
-  // Then, check the number of own properties
   return Object.keys(obj).length === 0;
 };
 
 export default function NavigationDrawer({ children }) {
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [previousUnreadCount, setPreviousUnreadCount] = useState(0);
+  const [pollInterval, setPollInterval] = useState(5000);
   const navigate = useNavigate();
   const snackbar = useSnackbar();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const { mode, toggleTheme } = useThemeMode();
 
-  // Fetch unread message count
   useEffect(() => {
     if (!isEmpty(user)) {
       fetchUnreadCount();
-      // Poll for new messages every 30 seconds
-      const interval = setInterval(fetchUnreadCount, 30000);
+      const interval = setInterval(() => {
+        fetchUnreadCount();
+        setPollInterval(prev => Math.min(prev + 5000, 30000));
+      }, pollInterval);
       return () => clearInterval(interval);
     }
-  }, [user.id]);
+  }, [user.id, pollInterval]);
+
+  useEffect(() => {
+    if (open) {
+      setPollInterval(5000);
+    }
+  }, [open]);
 
   const fetchUnreadCount = async () => {
     try {
       const res = await fetchWithAuth(`${API_URL}/bookings/unread/count`);
       const data = await res.json();
-      setUnreadCount(data.unreadCount || 0);
+      const newCount = data.unreadCount || 0;
+
+      if (newCount > previousUnreadCount && previousUnreadCount !== 0) {
+        snackbar(`You have ${newCount} new message${newCount > 1 ? 's' : ''}!`, "info");
+        setPollInterval(5000);
+      }
+
+      setPreviousUnreadCount(newCount);
+      setUnreadCount(newCount);
     } catch (error) {
       console.error("Failed to fetch unread count:", error);
     }
@@ -68,7 +82,16 @@ export default function NavigationDrawer({ children }) {
   const clickedIconLink = (link) => {
     setOpen(false);
     navigate(link);
-  }
+  };
+
+  const handleTitleClick = () => {
+    setOpen(false);
+    navigate("/");
+  };
+
+  const handleBackdropClick = () => {
+    setOpen(false);
+  };
 
   const drawer = (
     <div>
@@ -84,7 +107,6 @@ export default function NavigationDrawer({ children }) {
           <ListItemText primary={isEmpty(user) ? "Register" : "Profile"} />
         </ListItemButton>
         
-        {/* Guest-only menu items */}
         {user.role === "guest" && (
           <>
             <ListItemButton onClick={() => (clickedIconLink("/wishlist"))}>
@@ -102,7 +124,6 @@ export default function NavigationDrawer({ children }) {
           </>
         )}
 
-        {/* Host-only menu items */}
         {user.role === "host" && (
           <>
             <ListItemButton onClick={() => (clickedIconLink("/my-listings"))}>
@@ -124,7 +145,6 @@ export default function NavigationDrawer({ children }) {
           </>
         )}
 
-        {/* Available to both */}
         <ListItemButton onClick={() => (clickedIconLink("/properties"))}>
           <ListItemIcon><HotelIcon /></ListItemIcon>
           <ListItemText primary="Browse Properties" />
@@ -140,7 +160,6 @@ export default function NavigationDrawer({ children }) {
 
         <Divider sx={{ my: 1 }} />
         
-        {/* Theme Toggle Button */}
         <ListItemButton onClick={toggleTheme}>
           <ListItemIcon>
             {mode === 'light' ? <DarkModeIcon /> : <LightModeIcon />}
@@ -161,9 +180,21 @@ export default function NavigationDrawer({ children }) {
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <IconButton color="inherit" edge="start" onClick={() => setOpen(!open)} sx={{ mr: 2 }}>
-            <MenuIcon />
+            <Badge badgeContent={unreadCount} color="error">
+              <MenuIcon />
+            </Badge>
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography 
+            variant="h6" 
+            noWrap 
+            component="div" 
+            sx={{ 
+              flexGrow: 1, 
+              cursor: 'pointer',
+              '&:hover': { opacity: 0.8 }
+            }}
+            onClick={handleTitleClick}
+          >
             Beds4Crew&nbsp;&copy;
           </Typography>
           {isEmpty(user) && (
@@ -177,15 +208,33 @@ export default function NavigationDrawer({ children }) {
         variant="persistent"
         anchor="left"
         open={open}
+        onClose={handleBackdropClick}
         sx={{
           width: 'auto',
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: "border-box" },
         }}
+        ModalProps={{
+          keepMounted: true,
+          onBackdropClick: handleBackdropClick,
+        }}
       >
         {drawer}
       </Drawer>
-      {/* Main content, push right if drawer is open */}
+      {open && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: (theme) => theme.zIndex.drawer - 1,
+          }}
+          onClick={handleBackdropClick}
+        />
+      )}
       <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8, ml: open ? `${drawerWidth}px` : 0, transition: "margin .2s" }}>
         {children}
       </Box>
