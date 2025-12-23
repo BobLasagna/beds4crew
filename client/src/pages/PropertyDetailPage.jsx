@@ -231,13 +231,22 @@ export default function PropertyDetailPage() {
       )}
 
       {isOwner && (
-        <Card sx={{ ...commonStyles.sectionSpacing, p: 2, bgcolor: property.isActive ? "#e8f5e9" : "#ffebee" }}>
+        <Card sx={{ 
+          ...commonStyles.sectionSpacing, 
+          p: 2, 
+          bgcolor: (theme) => property.isActive 
+            ? theme.palette.mode === 'dark' ? 'success.dark' : '#e8f5e9'
+            : theme.palette.mode === 'dark' ? 'error.dark' : '#ffebee',
+          border: (theme) => `1px solid ${property.isActive 
+            ? theme.palette.mode === 'dark' ? theme.palette.success.main : '#4caf50'
+            : theme.palette.mode === 'dark' ? theme.palette.error.main : '#f44336'}`
+        }}>
           <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={2}>
             <Box>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: (theme) => theme.palette.mode === 'dark' ? 'common.white' : 'text.primary' }}>
                 {property.isActive ? "✓ Property Active" : "⚠ Property Inactive"}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: (theme) => theme.palette.mode === 'dark' ? 'grey.300' : 'text.secondary' }}>
                 {property.isActive ? "Your property is visible to guests and can receive bookings." : "Configure rooms and beds to activate your property."}
               </Typography>
             </Box>
@@ -281,7 +290,14 @@ export default function PropertyDetailPage() {
 
       {/* Photo Upload - Host Only */}
       {isOwner && (
-        <Card sx={{ ...commonStyles.sectionSpacing, p: { xs: 2, sm: 3 }, bgcolor: "#f5f5f5", border: "2px dashed #1976d2" }}>
+        <Card sx={{ 
+          ...commonStyles.sectionSpacing, 
+          p: { xs: 2, sm: 3 }, 
+          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : '#f5f5f5',
+          border: (theme) => theme.palette.mode === 'dark' 
+            ? `2px dashed ${theme.palette.primary.main}` 
+            : '2px dashed #1976d2'
+        }}>
           <Typography variant="h6" sx={commonStyles.sectionTitle}>Upload Photos</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Add photos to your listing. You can add captions to describe each photo.
@@ -342,7 +358,12 @@ export default function PropertyDetailPage() {
         <Card sx={{ ...commonStyles.sectionSpacing, p: { xs: 2, sm: 3 } }}>
           <Typography variant="h6" sx={commonStyles.sectionTitle}>Rooms & Beds</Typography>
           {property.rooms.map((room, roomIdx) => (
-            <Card key={roomIdx} sx={{ mb: 2, p: 2, bgcolor: "#f5f5f5" }}>
+            <Card key={roomIdx} sx={{ 
+              mb: 2, 
+              p: 2, 
+              bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : '#f5f5f5',
+              border: (theme) => theme.palette.mode === 'dark' ? `1px solid ${theme.palette.divider}` : 'none'
+            }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
                 {room.isPrivate ? "🔒 Private" : "🔓 Shared"} Room #{roomIdx + 1}
               </Typography>
