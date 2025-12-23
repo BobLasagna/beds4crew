@@ -53,20 +53,28 @@ app.use('/api/geocoding', geocodingRouter);
 // MongoDB Connection with optimizations
 const mongoURL = process.env.MONGO_URL;
 
-mongoose
-  .connect(mongoURL, {
-    maxPoolSize: 10, // Connection pooling
-    minPoolSize: 2,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-  })
-  .then(() => console.log("✅ MongoDB connected successfully"))
-  .catch((error) => console.log(`❌ MongoDB connection error: ${error.message}`));
+if (!mongoURL) {
+  console.error("❌ MONGO_URL environment variable is not set!");
+  console.log("⚠️  Server will start but database operations will fail.");
+} else {
+  mongoose
+    .connect(mongoURL, {
+      maxPoolSize: 10, // Connection pooling
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    })
+    .then(() => console.log("✅ MongoDB connected successfully"))
+    .catch((error) => {
+      console.error(`❌ MongoDB connection error: ${error.message}`);
+      console.log("⚠️  Server will continue running but database operations will fail.");
+    });
 
-// Handle mongoose connection errors after initial connection
-mongoose.connection.on("error", (err) => {
-  console.error("MongoDB connection error:", err);
-});
+  // Handle mongoose connection errors after initial connection
+  mongoose.connection.on("error", (err) => {
+    console.error("MongoDB connection error:", err);
+  });
+}
 
 // Basic test route
 app.get("/", (req, res) => {
@@ -112,11 +120,12 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// Start server - THIS MUST HAPPEN regardless of DB connection
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Local URL: http://localhost:${PORT}`);
   console.log(`🌐 Network URL: http://<your-ip>:${PORT}`);
-  console.log(`💡 Find your IP: Run 'ipconfig getifaddr en0' (Mac) or 'ipconfig' (Windows)`);
+  console.log(`💡 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`💡 MongoDB: ${mongoURL ? 'Configured' : '❌ NOT CONFIGURED'}`);
 });
