@@ -143,14 +143,16 @@ export default function BrowsePage() {
     const toRad = (x) => (x * Math.PI) / 180;
     const R = 3958.8; // Earth radius in miles
     const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lat2 - lng1);
+    const dLng = toRad(lng2 - lng1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(toRad(lat1)) *
         Math.cos(toRad(lat2)) *
         Math.sin(dLng / 2) *
         Math.sin(dLng / 2);
-    const c = 2 * Math.asin(Math.sqrt(a));
+    // Clamp 'a' to [0, 1] to handle floating-point precision issues
+    const clampedA = Math.min(1, Math.max(0, a));
+    const c = 2 * Math.asin(Math.sqrt(clampedA));
     return R * c;
   }, []);
 
