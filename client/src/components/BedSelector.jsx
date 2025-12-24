@@ -33,7 +33,7 @@ export default function BedSelector({ property, startDate, endDate, onSelectionC
       room.beds.forEach((bed, bedIndex) => {
         // Check if bed is available and not booked
         const isBooked = existingBookings.some(booking => 
-          booking.bookedBeds.some(b => 
+          booking.bookedBeds && booking.bookedBeds.some(b => 
             b.roomIndex === roomIndex && b.bedIndex === bedIndex
           )
         );

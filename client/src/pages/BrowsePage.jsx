@@ -260,28 +260,13 @@ export default function BrowsePage() {
                 setRadius(val);
                 setCurrentPage(1);
               }}
-              min={1}
-              max={100}
-              step={1}
+              min={10}
+              max={250}
+              step={10}
               valueLabelDisplay="auto"
             />
           </Box>
-
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            {loading ? (
-              <CircularProgress size={20} sx={{ mr: 1 }} />
-            ) : (
-              <>
-                {allPropertiesForList.length} total properties
-                <br />
-                <Typography variant="caption" component="span">
-                  ({filteredPropertiesWithCoords.length} within {radius} miles)
-                </Typography>
-              </>
-            )}
-          </Typography>
         </Box>
-
         {/* Custom Location Search Toggle */}
         <Box sx={{ mt: 2 }}>
           <FormControlLabel
@@ -294,6 +279,21 @@ export default function BrowsePage() {
             label="Search by address or landmark"
           />
         </Box>
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {loading ? (
+            <CircularProgress size={20} sx={{ mr: 1 }} />
+          ) : (
+            <>
+              {allPropertiesForList.length} total properties
+              <br />
+              <Typography variant="caption" component="span">
+                ({filteredPropertiesWithCoords.length} within {radius} miles)
+              </Typography>
+            </>
+          )}
+        </Typography>
+
+       
 
         {/* Custom Location Search Input */}
         {showCustomSearch && (

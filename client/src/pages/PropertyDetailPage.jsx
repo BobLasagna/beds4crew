@@ -25,7 +25,7 @@ export default function PropertyDetailPage() {
   const [bookings, setBookings] = useState([]);
   const [blockedPeriods, setBlockedPeriods] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [startDate, setStartDate] = useState(dayjs());
+  const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
   const [endDate, setEndDate] = useState(null);
   const [status, setStatus] = useState("");
   const [isOwner, setIsOwner] = useState(false);
@@ -522,15 +522,50 @@ export default function PropertyDetailPage() {
               }}
               minDate={dayjs()}
             />
-            <DatePicker 
-              label="Check-out" 
-              value={endDate} 
-              onChange={val => {
-                setEndDate(val ? dayjs(val) : null);
-                setStatus("");
-              }}
-              minDate={startDate ? dayjs(startDate).add(1, 'day') : dayjs().add(1, 'day')}
-            />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1 }}>
+              <DatePicker 
+                label="Check-out" 
+                value={endDate} 
+                onChange={val => {
+                  setEndDate(val ? dayjs(val) : null);
+                  setStatus("");
+                }}
+                minDate={startDate ? dayjs(startDate).add(1, 'day') : dayjs().add(1, 'day')}
+                sx={{ flex: 1 }}
+              />
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Chip 
+                  label="1 Week" 
+                  onClick={() => {
+                    if (startDate) {
+                      setEndDate(dayjs(startDate).add(7, 'day'));
+                      setStatus("");
+                    }
+                  }}
+                  disabled={!startDate}
+                  clickable
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ flex: 1 }}
+                />
+                <Chip 
+                  label="1 Month" 
+                  onClick={() => {
+                    if (startDate) {
+                      setEndDate(dayjs(startDate).add(1, 'month'));
+                      setStatus("");
+                    }
+                  }}
+                  disabled={!startDate}
+                  clickable
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ flex: 1 }}
+                />
+              </Box>
+            </Box>
           </Box>
 
           {startDate && endDate && nights > 0 && (

@@ -99,7 +99,7 @@ export default function MapView({
   return (
     <MapContainer
       center={mapCenter}
-      zoom={9}
+      zoom={3}
       scrollWheelZoom={true}
       style={{ width: '100%', height: '100%', minHeight: '500px', zIndex: 0 }}
     >
