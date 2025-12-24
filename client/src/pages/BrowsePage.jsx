@@ -33,6 +33,12 @@ console.log('Current time:', new Date().toISOString());
 console.log('API_URL:', API_URL);
 console.log('BASE_URL:', BASE_URL);
 
+// EXTREME DEBUG - This will show even if console is broken
+if (typeof window !== 'undefined') {
+  window.BROWSE_PAGE_LOADED = true;
+  window.BROWSE_PAGE_TIMESTAMP = new Date().toISOString();
+}
+
 //TODO: Move to config file or generate based off existing data
 const POPULAR_LOCATIONS = [
   { label: 'Miami, FL', lat: 25.7617, lng: -80.1918 },
