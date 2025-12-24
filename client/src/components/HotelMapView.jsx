@@ -83,6 +83,45 @@ export default function MapView({
 }) {
   const [expandedCluster, setExpandedCluster] = useState(null);
 
+  console.log('=== MapView Debug ===');
+  console.log('Properties received:', properties);
+  console.log('Properties count:', properties.length);
+  console.log('GroupedMarkers received:', groupedMarkers);
+  console.log('GroupedMarkers count:', groupedMarkers.length);
+  console.log('Center:', center);
+  console.log('Radius:', radius);
+
+  // Log first property details if available
+  if (properties.length > 0) {
+    console.log('First property sample:', {
+      id: properties[0]._id,
+      title: properties[0].title,
+      latitude: properties[0].latitude,
+      longitude: properties[0].longitude,
+      hasLatitude: !!properties[0].latitude,
+      hasLongitude: !!properties[0].longitude,
+      latType: typeof properties[0].latitude,
+      lngType: typeof properties[0].longitude
+    });
+  }
+
+  // Log grouped markers structure
+  if (groupedMarkers.length > 0) {
+    console.log('First grouped marker sample:', groupedMarkers[0]);
+    console.log('Grouped markers structure:', groupedMarkers.map((group, idx) => ({
+      groupIndex: idx,
+      count: group?.length || 0,
+      hasData: !!group,
+      firstProperty: group?.[0] ? {
+        id: group[0]._id,
+        hasLat: !!group[0].latitude,
+        hasLng: !!group[0].longitude,
+        lat: group[0].latitude,
+        lng: group[0].longitude
+      } : null
+    })));
+  }
+
   // Validate center coordinates
   if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') {
     console.error('Invalid center coordinates:', center);
@@ -96,30 +135,9 @@ export default function MapView({
   const mapCenter = [center.lat, center.lng];
   const radiusMeters = radius * 1609.34; // Convert miles to meters
 
-  // Helper function to generate random offset within 150m radius
-  const getObfuscatedPosition = (property, index) => {
-    // Use property ID and index to create a deterministic but seemingly random offset
-    const seed = (property._id.charCodeAt(0) + index) % 360;
-    const angleDegrees = seed; // Angle in degrees (0-360)
-    const distance = 50 + ((property._id.charCodeAt(1) || 0) % 100); // 50-150 meters
-
-    const radians = (angleDegrees * Math.PI) / 180;
-    const latOffset = (distance * Math.cos(radians)) / 111000; // 111km per degree latitude
-    const lngOffset = (distance * Math.sin(radians)) / (111000 * Math.cos((center.lat * Math.PI) / 180));
-
-    return [
-      property.latitude + latOffset,
-      property.longitude + lngOffset,
-    ];
-  };
-
-  console.log('MapView render:', {
-    properties: properties.length,
-    groupedMarkers: groupedMarkers.length,
-    center,
-    radius,
-    hasValidMarkers: groupedMarkers.some(group => group && group.length > 0)
-  });
+  console.log('Map center (array format):', mapCenter);
+  console.log('Radius in meters:', radiusMeters);
+  console.log('=== End MapView Debug ===');
 
   return (
     <MapContainer
@@ -151,16 +169,31 @@ export default function MapView({
       {/* Render grouped markers */}
       {groupedMarkers && groupedMarkers.length > 0 ? (
         groupedMarkers.map((group, groupIdx) => {
-          if (!group || group.length === 0) return null;
+          console.log(`Processing group ${groupIdx}:`, group);
+          
+          if (!group || group.length === 0) {
+            console.log(`Group ${groupIdx} is empty, skipping`);
+            return null;
+          }
           
           if (group.length === 1) {
             // Single property - show basic info
             const prop = group[0];
+            console.log(`Group ${groupIdx} - Single property:`, {
+              id: prop._id,
+              title: prop.title,
+              latitude: prop.latitude,
+              longitude: prop.longitude,
+              hasCoords: !!(prop.latitude && prop.longitude)
+            });
+            
             if (!prop.latitude || !prop.longitude) {
-              console.warn('Property missing coordinates:', prop._id);
+              console.warn(`Property ${prop._id} missing coordinates - latitude: ${prop.latitude}, longitude: ${prop.longitude}`);
               return null;
             }
-            const position = getObfuscatedPosition(prop, 0);
+            
+            const position = [prop.latitude, prop.longitude];
+            console.log(`Rendering marker at position:`, position);
 
             return (
               <Marker
@@ -198,11 +231,19 @@ export default function MapView({
           } else {
             // Multiple properties in cluster - show cluster count
             const clusterCenter = group[0]; // Use first property's location as cluster center
+            console.log(`Group ${groupIdx} - Cluster with ${group.length} properties:`, {
+              centerProperty: clusterCenter._id,
+              latitude: clusterCenter.latitude,
+              longitude: clusterCenter.longitude
+            });
+            
             if (!clusterCenter.latitude || !clusterCenter.longitude) {
-              console.warn('Cluster center missing coordinates:', clusterCenter._id);
+              console.warn(`Cluster center ${clusterCenter._id} missing coordinates`);
               return null;
             }
-            const position = getObfuscatedPosition(clusterCenter, groupIdx);
+            
+            const position = [clusterCenter.latitude, clusterCenter.longitude];
+            console.log(`Rendering cluster marker at position:`, position);
 
             return (
               <Marker
