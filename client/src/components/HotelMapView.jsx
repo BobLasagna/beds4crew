@@ -99,7 +99,7 @@ export default function MapView({
   return (
     <MapContainer
       center={mapCenter}
-      zoom={7}
+      zoom={10}
       minZoom={5}
       maxZoom={14}
       scrollWheelZoom={true}
