@@ -311,7 +311,7 @@ export default function BrowsePage() {
 
         {/* Custom Location Search Input */}
         {showCustomSearch && (
-          <Box sx={{ display: 'flex', gap: 1, mt: 2, alignItems: 'flex-start' }}>
+          <Box sx={{ display: 'flex', gap: 1, mt: 2, alignItems: 'flex-start', width: '100%' }}>
             <TextField
               placeholder="Search address / city / landmark"
               value={searchQuery}
@@ -323,7 +323,7 @@ export default function BrowsePage() {
               }}
               variant="outlined"
               size="small"
-              sx={{ flex: 1, minWidth: 250 }}
+              fullWidth
               InputProps={{
                 endAdornment: searchQuery && (
                   <InputAdornment position="end">
@@ -342,7 +342,7 @@ export default function BrowsePage() {
               variant="contained"
               onClick={handleCustomLocationSearch}
               disabled={searchLoading}
-              sx={{ minWidth: 100 }}
+              sx={{ minWidth: 100, flexShrink: 0 }}
             >
               {searchLoading ? 'Searching...' : 'Search'}
             </Button>
@@ -351,29 +351,31 @@ export default function BrowsePage() {
       </Card>
 
       {/* Map Section */}
-      {!loading && (
-        <Card sx={{ mb: 3, height: '500px', overflow: 'hidden', display: 'flex', maxWidth: '600px' }}>
-          {filteredProperties.length > 0 ? (
-            <MapView
-              properties={filteredProperties}
-              groupedMarkers={groupedMarkers}
-              center={center}
-              radius={radius}
-              onPropertyClick={(id) => navigate(`/property/${id}`)}
-            />
-          ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', p: 3 }}>
-              <Typography color="text.secondary" textAlign="center">
-                No properties with map coordinates found within {radius} miles.
-                <br />
-                <Typography variant="caption" component="span">
-                  (Properties without coordinates will still appear in the list below)
-                </Typography>
+      <Card sx={{ mb: 3, height: '500px', overflow: 'hidden', maxWidth: '600px' }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+            <CircularProgress />
+          </Box>
+        ) : filteredProperties.length > 0 ? (
+          <MapView
+            properties={filteredProperties}
+            groupedMarkers={groupedMarkers}
+            center={center}
+            radius={radius}
+            onPropertyClick={(id) => navigate(`/property/${id}`)}
+          />
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', p: 3 }}>
+            <Typography color="text.secondary" textAlign="center">
+              No properties with map coordinates found within {radius} miles.
+              <br />
+              <Typography variant="caption" component="span">
+                Try increasing the search radius or selecting a different location.
               </Typography>
-            </Box>
-          )}
-        </Card>
-      )}
+            </Typography>
+          </Box>
+        )}
+      </Card>
 
       {/* Results List Section */}
       <Box>
