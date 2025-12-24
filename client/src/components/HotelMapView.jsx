@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 import { Box, Typography, Button, List, ListItem, ListItemText } from '@mui/material';
 import L from 'leaflet';
+
+// Import Leaflet CSS - this ensures it's bundled correctly
+import 'leaflet/dist/leaflet.css';
+
+// Fix for marker icons in production builds
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 // Fix default icon issue with bundlers (Vite, CRA, etc.)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
 });
 
 // Component to handle map updates when center changes
@@ -76,6 +83,16 @@ export default function MapView({
 }) {
   const [expandedCluster, setExpandedCluster] = useState(null);
 
+  // Validate center coordinates
+  if (!center || typeof center.lat !== 'number' || typeof center.lng !== 'number') {
+    console.error('Invalid center coordinates:', center);
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', p: 3 }}>
+        <Typography color="error">Map error: Invalid coordinates</Typography>
+      </Box>
+    );
+  }
+
   const mapCenter = [center.lat, center.lng];
   const radiusMeters = radius * 1609.34; // Convert miles to meters
 
@@ -100,7 +117,8 @@ export default function MapView({
     properties: properties.length,
     groupedMarkers: groupedMarkers.length,
     center,
-    radius
+    radius,
+    hasValidMarkers: groupedMarkers.some(group => group && group.length > 0)
   });
 
   return (
@@ -108,7 +126,7 @@ export default function MapView({
       center={mapCenter}
       zoom={13}
       scrollWheelZoom={true}
-      style={{ width: '100%', height: '100%' }}
+      style={{ width: '100%', height: '100%', minHeight: '500px', zIndex: 0 }}
     >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

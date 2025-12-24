@@ -107,7 +107,7 @@ export default function BrowsePage() {
   }, [calculateDistance]);
 
   // Filter properties within radius (only those with coordinates)
-  const filteredProperties = useMemo(() => {
+  const filteredPropertiesWithCoords = useMemo(() => {
     const filtered = allProperties.filter(p => {
       // Only include properties with valid coordinates for map/distance filtering
       if (!p.latitude || !p.longitude) return false;
@@ -129,9 +129,14 @@ export default function BrowsePage() {
     return filtered;
   }, [allProperties, center, radius, calculateDistance]);
 
-  // Group properties by proximity (CLUSTER_RADIUS_METERS)
+  // All properties for list view (including those without coordinates)
+  const allPropertiesForList = useMemo(() => {
+    return allProperties;
+  }, [allProperties]);
+
+  // Group properties by proximity (CLUSTER_RADIUS_METERS) - only for map
   const groupedMarkers = useMemo(() => {
-    if (!filteredProperties.length) {
+    if (!filteredPropertiesWithCoords.length) {
       console.log('No filtered properties to group');
       return [];
     }
@@ -139,17 +144,17 @@ export default function BrowsePage() {
     const groups = [];
     const visited = new Set();
 
-    for (let i = 0; i < filteredProperties.length; i++) {
+    for (let i = 0; i < filteredPropertiesWithCoords.length; i++) {
       if (visited.has(i)) continue;
 
-      const prop = filteredProperties[i];
+      const prop = filteredPropertiesWithCoords[i];
       const cluster = [prop];
       visited.add(i);
 
       // Find all properties within CLUSTER_RADIUS_METERS of this property
-      for (let j = i + 1; j < filteredProperties.length; j++) {
+      for (let j = i + 1; j < filteredPropertiesWithCoords.length; j++) {
         if (visited.has(j)) continue;
-        const otherProp = filteredProperties[j];
+        const otherProp = filteredPropertiesWithCoords[j];
         const dist = calculateDistanceMeters(
           prop.latitude,
           prop.longitude,
@@ -167,19 +172,19 @@ export default function BrowsePage() {
 
     console.log('Grouped markers:', {
       groupCount: groups.length,
-      totalProperties: filteredProperties.length,
+      totalProperties: filteredPropertiesWithCoords.length,
       groupSizes: groups.map(g => g.length)
     });
 
     return groups;
-  }, [filteredProperties, calculateDistanceMeters]);
+  }, [filteredPropertiesWithCoords, calculateDistanceMeters]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredProperties.length / RESULTS_PER_PAGE);
+  // Pagination - use all properties
+  const totalPages = Math.ceil(allPropertiesForList.length / RESULTS_PER_PAGE);
   const paginatedProperties = useMemo(() => {
     const start = (currentPage - 1) * RESULTS_PER_PAGE;
-    return filteredProperties.slice(start, start + RESULTS_PER_PAGE);
-  }, [filteredProperties, currentPage]);
+    return allPropertiesForList.slice(start, start + RESULTS_PER_PAGE);
+  }, [allPropertiesForList, currentPage]);
 
   const handleLocationChange = (e) => {
     const selected = POPULAR_LOCATIONS.find(l => l.label === e.target.value);
@@ -215,10 +220,10 @@ export default function BrowsePage() {
 
   const handleToggleWishlist = async (propertyId) => {
     if (!user?.id) {
-      snackbar('Must be logged in to add to wishlist', 'error');
+      snackbar('Please login to add to wishlist', 'warning');
       return;
     }
-
+    
     const inWishlist = wishlist.includes(propertyId);
     const method = inWishlist ? 'DELETE' : 'POST';
 
@@ -291,7 +296,13 @@ export default function BrowsePage() {
             {loading ? (
               <CircularProgress size={20} sx={{ mr: 1 }} />
             ) : (
-              `${filteredProperties.length} result${filteredProperties.length !== 1 ? 's' : ''}`
+              <>
+                {allPropertiesForList.length} total properties
+                <br />
+                <Typography variant="caption" component="span">
+                  ({filteredPropertiesWithCoords.length} with map location)
+                </Typography>
+              </>
             )}
           </Typography>
         </Box>
@@ -356,9 +367,9 @@ export default function BrowsePage() {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
             <CircularProgress />
           </Box>
-        ) : filteredProperties.length > 0 ? (
+        ) : filteredPropertiesWithCoords.length > 0 ? (
           <MapView
-            properties={filteredProperties}
+            properties={filteredPropertiesWithCoords}
             groupedMarkers={groupedMarkers}
             center={center}
             radius={radius}
@@ -370,7 +381,9 @@ export default function BrowsePage() {
               No properties with map coordinates found within {radius} miles.
               <br />
               <Typography variant="caption" component="span">
-                Try increasing the search radius or selecting a different location.
+                {allPropertiesForList.length > 0 
+                  ? `${allPropertiesForList.length} properties available but don't have coordinates yet. Check the list below.`
+                  : 'Try increasing the search radius or selecting a different location.'}
               </Typography>
             </Typography>
           </Box>
@@ -380,7 +393,7 @@ export default function BrowsePage() {
       {/* Results List Section */}
       <Box>
         <Typography variant="h6" mb={2}>
-          Properties in Area ({filteredProperties.length})
+          All Properties ({allPropertiesForList.length})
         </Typography>
 
         {loading ? (
