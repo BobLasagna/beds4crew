@@ -337,6 +337,18 @@ export default function BrowsePage() {
               - Lng: {allProperties[0].longitude} (type: {typeof allProperties[0].longitude})<br/>
               - Has Lat? {allProperties[0].latitude ? 'YES' : 'NO'}<br/>
               - Has Lng? {allProperties[0].longitude ? 'YES' : 'NO'}<br/>
+              - Distance: {calculateDistance(center.lat, center.lng, allProperties[0].latitude, allProperties[0].longitude).toFixed(2)} miles<br/>
+              - Within radius? {calculateDistance(center.lat, center.lng, allProperties[0].latitude, allProperties[0].longitude) <= radius ? 'YES' : 'NO'}<br/>
+              <br/>
+              <strong>ALL PROPERTIES DISTANCES:</strong><br/>
+              {allProperties.filter(p => p.latitude && p.longitude).map((p, idx) => {
+                const dist = calculateDistance(center.lat, center.lng, p.latitude, p.longitude);
+                return (
+                  <span key={idx}>
+                    {idx + 1}. {p.title}: {dist.toFixed(2)} miles {dist <= radius ? '✓' : '✗'}<br/>
+                  </span>
+                );
+              })}
             </>
           )}
         </Typography>
