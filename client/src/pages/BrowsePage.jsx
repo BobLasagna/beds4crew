@@ -163,8 +163,13 @@ export default function BrowsePage() {
   const filteredPropertiesWithCoords = useMemo(() => {
     const filtered = allProperties.filter(p => {
       // Only include properties with valid coordinates for map/distance filtering
-      if (!p.latitude || !p.longitude) return false;
-      return calculateDistance(center.lat, center.lng, p.latitude, p.longitude) <= radius;
+      if (!p.latitude || !p.longitude) {
+        console.log(`Property ${p.title} missing coords`);
+        return false;
+      }
+      const distance = calculateDistance(center.lat, center.lng, p.latitude, p.longitude);
+      console.log(`Distance from ${p.title}: ${distance.toFixed(2)} miles (limit: ${radius})`);
+      return distance <= radius;
     });
     
     console.log('Filtered properties for map:', {
