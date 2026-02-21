@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Box, Typography, Card, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Alert, CircularProgress, MenuItem, Grid, Input, Breadcrumbs, Avatar, Divider, useMediaQuery } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, API_URL } from "../utils/api";
+import { fetchWithAuth, formatPriceDisplay, API_URL } from "../utils/api";
 import { LoadingState } from "../components/EmptyState";
 import RoomBedsConfigurator from "../components/RoomBedsConfigurator";
 import PhotoTile from "../components/PhotoTile";
@@ -22,6 +22,19 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
 const categories = ["apartment", "condo", "house", "hostel", "flat", "villa"];
+
+const getBreadcrumbLabel = (routePath) => {
+  if (!routePath) return "Listings";
+  if (routePath.startsWith("/browse")) return "Browse";
+  if (routePath.startsWith("/properties")) return "Listings";
+  if (routePath.startsWith("/wishlist")) return "Wishlist";
+  if (routePath.startsWith("/trips")) return "Trips";
+  if (routePath.startsWith("/my-listings")) return "My listings";
+  if (routePath.startsWith("/reservations")) return "Reservations";
+  if (routePath.startsWith("/profile")) return "Profile";
+  if (routePath.startsWith("/")) return "Dashboard";
+  return "Back";
+};
 
 export default function PropertyDetailPage() {
   const { id } = useParams();
@@ -52,8 +65,18 @@ export default function PropertyDetailPage() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const snackbar = useSnackbar();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const isMobile = useMediaQuery((theme) => theme.breakpoints.down("sm"));
+  const previousRoute = (() => {
+    const fromState = location.state?.from;
+    const fromStorage = sessionStorage.getItem("previousRoute");
+    const currentRoute = `${location.pathname}${location.search || ""}`;
+    const candidate = fromState || fromStorage;
+    if (!candidate || candidate === currentRoute) return null;
+    return candidate;
+  })();
+  const previousRouteLabel = getBreadcrumbLabel(previousRoute);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -104,6 +127,7 @@ export default function PropertyDetailPage() {
   }, [isOwner, searchParams]);
 
   const handleBookingSelectionChange = useCallback((selection) => {
+    console.log('PropertyDetailPage: Received booking selection from BedSelector:', selection);
     setBookingSelection(selection);
   }, []);
 
@@ -123,12 +147,12 @@ export default function PropertyDetailPage() {
     }
 
     // Check if selected dates have any confirmed bookings or blocked periods
+    const isWholePropertyRequest = property.type === "accommodation" && property.pricePerNight > 0;
     const start = startDate;
     const end = endDate;
     let current = start;
     
     while (current.isBefore(end) || current.isSame(end, "day")) {
-      const dateStr = current.format("YYYY-MM-DD");
       const blockedOnDate = blockedPeriods.some(block => {
         const blockStart = dayjs(block.startDate);
         const blockEnd = dayjs(block.endDate);
@@ -138,7 +162,14 @@ export default function PropertyDetailPage() {
       const bookedOnDate = bookings.some(booking => {
         const bookStart = dayjs(booking.startDate);
         const bookEnd = dayjs(booking.endDate);
-        return current.isBetween(bookStart, bookEnd, null, "[]");
+        const overlaps = current.isBetween(bookStart, bookEnd, null, "[]");
+        if (!overlaps) return false;
+
+        // For whole-property booking requests, any overlap blocks the date.
+        if (isWholePropertyRequest) return true;
+
+        // For per-bed booking requests, only whole-property bookings block the date.
+        return !booking.bookedBeds || booking.bookedBeds.length === 0;
       });
       
       if (blockedOnDate || bookedOnDate) {
@@ -416,7 +447,13 @@ export default function PropertyDetailPage() {
 
       <Breadcrumbs sx={{ mb: 2 }}>
         <Button variant="text" size="small" onClick={() => navigate("/")}>Home</Button>
-        <Button variant="text" size="small" onClick={() => navigate("/properties")}>Listings</Button>
+        <Button
+          variant="text"
+          size="small"
+          onClick={() => navigate(previousRoute || "/properties")}
+        >
+          {previousRouteLabel}
+        </Button>
         <Typography variant="body2" color="text.secondary">{property.title}</Typography>
       </Breadcrumbs>
 
@@ -446,7 +483,13 @@ export default function PropertyDetailPage() {
         </Box>
         <Box display="flex" flexWrap="wrap" alignItems="center" gap={2}>
           <Box display="flex" alignItems="center" gap={1}>
-            <Avatar sx={{ width: 32, height: 32 }}>{property.ownerHost?.firstName?.[0] || "H"}</Avatar>
+            <Avatar
+              sx={{ width: 32, height: 32, fontSize: 14 }}
+              src={property.ownerHost?.profileImagePath || ""}
+              alt={property.ownerHost?.firstName || "Host"}
+            >
+              {property.ownerHost?.firstName?.[0] || "H"}
+            </Avatar>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {property.ownerHost?.firstName ? `${property.ownerHost.firstName} ${property.ownerHost.lastName || ""}` : "Verified Host"}
             </Typography>
@@ -580,7 +623,7 @@ export default function PropertyDetailPage() {
                     <Box><Typography variant="caption" color="text.secondary">Type</Typography><Typography variant="body2">{property.type}</Typography></Box>
                     <Box><Typography variant="caption" color="text.secondary">Category</Typography><Typography variant="body2">{property.category || "..."}</Typography></Box>
                     <Box><Typography variant="caption" color="text.secondary">Location</Typography><Typography variant="body2">{property.city}, {property.country}</Typography></Box>
-                    <Box><Typography variant="caption" color="text.secondary">Price/night</Typography><Typography variant="body2">${property.pricePerNight || "..."}</Typography></Box>
+                    <Box><Typography variant="caption" color="text.secondary">Price/night</Typography><Typography variant="body2">{formatPriceDisplay(property)}</Typography></Box>
                     <Box><Typography variant="caption" color="text.secondary">Max guests</Typography><Typography variant="body2">{property.maxGuests || "..."}</Typography></Box>
                   </Box>
                 </>
@@ -590,7 +633,7 @@ export default function PropertyDetailPage() {
             <Box sx={{ position: { md: "sticky" }, top: { md: 96 } }}>
               <Card sx={{ p: 3, borderRadius: 3, mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  ${property.pricePerNight || "--"} / night
+                  {formatPriceDisplay(property)}
                 </Typography>
                 {(metrics.responseHours || metrics.completionRate) && (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -865,7 +908,7 @@ export default function PropertyDetailPage() {
                       No host stats yet.
                     </Typography>
                   )}
-                  <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button>
+                  {/* TODO <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button> */}
               </Card>
             
           </Box>
