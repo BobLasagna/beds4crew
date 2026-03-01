@@ -25,6 +25,7 @@ const ReservationListPage = lazy(() => import("./pages/ReservationListPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const WishListPage = lazy(() => import("./pages/WishListPage"));
 const BrowsePage = lazy(() => import('./pages/BrowsePage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
 const SupportPage = lazy(() => import('./pages/SupportPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 
@@ -100,6 +101,7 @@ function App() {
                 <Route path="/login" element={<PublicRoute> <LoginPage /> </PublicRoute>} />
                 <Route path="/forgot-password" element={<PublicRoute> <ForgotPasswordPage /> </PublicRoute>} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/pricing" element={<ProtectedRoute><PricingPage /></ProtectedRoute>} />
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/add-property" element={<ProtectedRoute requiredRole="host"> <AddPropertyPage /> </ProtectedRoute>} />
                 <Route path="/properties" element={<PropertyFeedPage />} />

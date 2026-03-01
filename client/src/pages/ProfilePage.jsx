@@ -24,10 +24,11 @@ import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { getListingMetrics } from "../utils/helpers";
+import { useNavigate } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
 
 export default function ProfilePage() {
-  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const navigate = useNavigate();  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
   const [tab, setTab] = useState(0);
   const [listings, setListings] = useState([]);
   const [form, setForm] = useState({
@@ -50,7 +51,13 @@ export default function ProfilePage() {
   const [passwordEmailLoading, setPasswordEmailLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [billingLoading, setBillingLoading] = useState(false);
-  const [subscriptionInfo, setSubscriptionInfo] = useState({
+  const [tierInfo, setTierInfo] = useState({
+    tier: 0,
+    tierName: "Free",
+    listingLimit: 0,
+    activeListings: 0,
+    canAddMore: false
+  });  const [subscriptionInfo, setSubscriptionInfo] = useState({
     status: storedUser.subscriptionStatus || "",
     currentPeriodEnd: storedUser.subscriptionCurrentPeriodEnd || null,
     hasPaid: storedUser.hasPaid || false,
@@ -129,6 +136,17 @@ export default function ProfilePage() {
     }
   }, [snackbar]);
 
+  // Fetch tier info when subscription status changes
+  useEffect(() => {
+    if (!storedUser.id || storedUser.role !== "host") return;
+    
+    fetchWithAuth(`${API_URL}/billing/user-tier`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) setTierInfo(data);
+      })
+      .catch(err => console.error("Failed to fetch tier info:", err));
+  }, [storedUser.id, storedUser.role, subscriptionInfo.status]);
   const profileMetrics = useMemo(() => getListingMetrics({}), []);
   const hasRating = typeof profileMetrics.rating === "number" && typeof profileMetrics.reviews === "number";
 
@@ -669,6 +687,48 @@ export default function ProfilePage() {
             </Box>
           </Card>
 
+
+          {/* Tier & Listing Limits (Host only) */}
+          {storedUser.role === "host" && (
+            <Card sx={{ p: 3, borderRadius: 3, maxWidth: 520, border: "2px solid #e0e0e0" }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+                💰 Current Plan
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {tierInfo.tierName === "Free" 
+                  ? "Free plan - No active subscription"
+                  : `${tierInfo.tierName} Plan (${tierInfo.activeListings}/${tierInfo.listingLimit} listings used)`
+                }
+              </Typography>
+              <Box sx={{ mb: 2, p: 2, backgroundColor: "#f5f5f5", borderRadius: 1 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+                  <Typography variant="body2">Active Listings</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {tierInfo.activeListings} / {tierInfo.listingLimit}
+                  </Typography>
+                </Box>
+                <Box sx={{ width: "100%", height: 6, backgroundColor: "#ddd", borderRadius: 3, overflow: "hidden" }}>
+                  <Box
+                    sx={{
+                      height: "100%",
+                      width: `${tierInfo.listingLimit > 0 ? (tierInfo.activeListings / tierInfo.listingLimit) * 100 : 0}%`,
+                      backgroundColor: tierInfo.canAddMore ? "#4caf50" : "#ff9800",
+                      transition: "width 0.3s ease"
+                    }}
+                  />
+                </Box>
+              </Box>
+              <Button
+                fullWidth
+                variant={isSubscriptionActive ? "outlined" : "contained"}
+                color={isSubscriptionActive && !tierInfo.canAddMore ? "warning" : "primary"}
+                onClick={() => navigate("/pricing")}
+                sx={{ mt: 1 }}
+              >
+                {isSubscriptionActive ? "Upgrade Plan" : "Choose a Plan"}
+              </Button>
+            </Card>
+          )}
           {/* Email Preferences */}
           <Card sx={{ p: 3, borderRadius: 3, maxWidth: 520 }}>
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>

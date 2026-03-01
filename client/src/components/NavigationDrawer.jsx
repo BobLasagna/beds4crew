@@ -20,6 +20,7 @@ import {
   AccordionSummary,
   AccordionDetails,
   useMediaQuery,
+  Chip,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import HomeIcon from "@mui/icons-material/Home";
@@ -38,6 +39,7 @@ import MessageIcon from "@mui/icons-material/Message";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { logout, fetchWithAuth, API_URL } from "../utils/api";
@@ -239,6 +241,10 @@ export default function NavigationDrawer({ children }) {
               </ListItemIcon>
               <ListItemText primary="Reservations" />
             </ListItemButton>
+            <ListItemButton onClick={() => (clickedIconLink("/pricing"))}>
+              <ListItemIcon><TrendingUpIcon /></ListItemIcon>
+              <ListItemText primary="Pricing & Plans" />
+            </ListItemButton>
           </>
         )}
       </List>
@@ -281,6 +287,16 @@ export default function NavigationDrawer({ children }) {
             </Box>
             
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: "auto" }}>
+            {user.role === "host" && (
+              <Button
+                variant="outlined"
+                size="small"
+                sx={{ display: { xs: "none", md: "inline-flex" }, color: "warning.main", borderColor: "warning.main" }}
+                onClick={() => navigate("/pricing")}
+              >
+                💰 Upgrade Plan
+              </Button>
+            )}
             <Button
               variant="contained"
               color="primary"
@@ -346,6 +362,7 @@ export default function NavigationDrawer({ children }) {
                 ? [
                     <MenuItem key="listings" onClick={() => { closeAccountMenu(); navigate("/my-listings"); }}>Listings</MenuItem>,
                     <MenuItem key="reservations" onClick={() => { closeAccountMenu(); navigate("/reservations"); }}>Reservations</MenuItem>,
+                    <MenuItem key="pricing" onClick={() => { closeAccountMenu(); navigate("/pricing"); }}>Pricing & Plans</MenuItem>,
                   ]
                 : []),
             ])
