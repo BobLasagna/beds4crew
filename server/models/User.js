@@ -30,6 +30,10 @@ const UserSchema = new mongoose.Schema(
     subscriptionStatus: { type: String, default: "" },
     subscriptionCurrentPeriodEnd: { type: Date, default: null },
     
+    // Stripe tier & listing limits
+    stripeCurrentTier: { type: Number, enum: [0, 1, 2, 3, 4], default: 0 },
+    listingLimit: { type: Number, default: 0 },
+    
     // Email notification preferences
     emailPreferences: {
       bookingConfirmation: { type: Boolean, default: true },

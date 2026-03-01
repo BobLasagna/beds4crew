@@ -6,7 +6,7 @@ const cache = require("../utils/cache");
 const { geocodeAddress } = require("../utils/geocoding");
 const { uploadMultiple } = require("../utils/fileUpload");
 const { sanitizeInput } = require("../utils/validation");
-const { getListingLimit } = require("../utils/subscriptionTiers");
+
 const router = express.Router();
 
 // Create property (Host only)
@@ -18,21 +18,7 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
       return res.status(403).json({ message: "Unauthorized: Only hosts can create properties" });
     }
 
-
-    // NEW: Check listing limit
-    const activeListings = await Property.countDocuments({
-      ownerHost: user._id,
-      status: "active"
-    });
-
-    if (activeListings >= user.listingLimit) {
-      return res.status(403).json({
-        message: `You've reached your listing limit (${user.listingLimit}). Upgrade your plan to add more.`,
-        currentListings: activeListings,
-        limit: user.listingLimit,
-        tier: user.stripeCurrentTier
-      });
-    }    const { title, type, description, pricePerNight, address, maxGuests, facilities, category, city, country, rooms } = req.body;
+    const { title, type, description, pricePerNight, address, maxGuests, facilities, category, city, country, rooms } = req.body;
     
     // Cloudinary returns the full URL in file.path
     const images = req.files?.map(file => {
@@ -80,7 +66,7 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
     }
 
     // Property is only active if it has rooms configured
-    const status = parsedRooms.length > 0 ? "active" : "inactive";
+    const isActive = parsedRooms.length > 0;
 
     const property = new Property({
       ownerHost: req.user.id,
@@ -98,7 +84,7 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
       rooms: parsedRooms,
       latitude,
       longitude,
-      status,
+      isActive,
     });
     await property.save();
     
@@ -121,7 +107,7 @@ router.get("/", async (req, res) => {
       return res.json(cached);
     }
     
-    const properties = await Property.find({ status: "active" })
+    const properties = await Property.find({ isActive: true })
       .populate("ownerHost", "firstName lastName profileImagePath hasPaid")
       .lean();
       
@@ -181,7 +167,7 @@ router.get("/date-finder", async (req, res) => {
     
     // Get all active properties
     const allProperties = await Property.find({ 
-      status: "active",
+      isActive: true,
       latitude: { $exists: true, $ne: null },
       longitude: { $exists: true, $ne: null }
     })
@@ -390,7 +376,7 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 
     // Update fields
-    const { title, description, pricePerNight, maxGuests, facilities, category, rooms } = req.body;
+    const { title, description, pricePerNight, maxGuests, facilities, category, isActive, rooms } = req.body;
     
     if (title) property.title = sanitizeInput(title);
     if (description) property.description = sanitizeInput(description);
@@ -412,32 +398,13 @@ router.put("/:id", verifyToken, async (req, res) => {
       property.rooms = rooms;
     }
     
-    // Handle status - can only activate if rooms are configured and listing limit allows
-    if (req.body.status !== undefined) {
-      if (req.body.status === "active") {
-        if (property.rooms.length === 0) {
-          return res.status(400).json({ message: "Cannot activate property without rooms configured" });
-        }
-        
-        // Check listing limit when activating
-        if (property.status !== "active") {
-          const user = await User.findById(req.user.id);
-          const activeListings = await Property.countDocuments({
-            ownerHost: user._id,
-            status: "active"
-          });
-          
-          if (activeListings >= user.listingLimit) {
-            return res.status(403).json({
-              message: `You've reached your listing limit (${user.listingLimit}). Upgrade your plan to add more.`,
-              currentListings: activeListings,
-              limit: user.listingLimit
-            });
-          }
-        }
+    // Handle isActive - can only activate if rooms are configured
+    if (isActive !== undefined) {
+      if (isActive && property.rooms.length === 0) {
+        return res.status(400).json({ message: "Cannot activate property without rooms configured" });
       }
-      property.status = req.body.status;
-    }    }
+      property.isActive = isActive;
+    }
 
     await property.save();
 

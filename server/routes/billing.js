@@ -1,6 +1,7 @@
 const express = require("express");
 const verifyToken = require("../middleware/auth");
 const User = require("../models/User");
+const { getTierFromPrice, getListingLimit, getTierInfo } = require("../utils/subscriptionTiers");
 
 const router = express.Router();
 
@@ -36,13 +37,20 @@ const upsertSubscriptionDetails = async ({
   stripeSubscriptionId,
   status,
   currentPeriodEnd,
+  priceId, // NEW: track price ID for tier mapping
 }) => {
+  // NEW: Calculate tier from price ID
+  const tier = getTierFromPrice(priceId);
+  const listingLimit = getListingLimit(tier);
+
   const update = {
     stripeCustomerId,
     stripeSubscriptionId,
     subscriptionStatus: status || null,
     subscriptionCurrentPeriodEnd: currentPeriodEnd || null,
     hasPaid: ["active", "trialing"].includes(status),
+    stripeCurrentTier: tier, // NEW
+    listingLimit: listingLimit, // NEW
   };
 
   // If subscription is active or trialing, set user role to host
@@ -53,11 +61,109 @@ const upsertSubscriptionDetails = async ({
   else if (["canceled", "incomplete", "incomplete_expired", "past_due", "unpaid"].includes(status)) {
     update.role = "guest";
     update.hasPaid = false;
+    update.stripeCurrentTier = 0; // NEW: Reset tier
+    update.listingLimit = 0; // NEW: Reset limit
   }
 
   await User.findByIdAndUpdate(userId, update, { new: true });
 };
 
+// NEW: Get user's tier info
+router.get("/user-tier", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select(
+      "stripeCurrentTier listingLimit role"
+    );
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Count active properties
+    const Property = require("../models/Property");
+    const activeListings = await Property.countDocuments({
+      ownerHost: user._id,
+      status: "active"
+    });
+
+    const tierInfo = getTierInfo(user.stripeCurrentTier);
+
+    return res.json({
+      tier: user.stripeCurrentTier,
+      tierName: tierInfo.name,
+      listingLimit: user.listingLimit,
+      activeListings: activeListings,
+      canAddMore: activeListings < user.listingLimit
+    });
+  } catch (error) {
+    console.error("Tier info error:", error.message);
+    return res.status(500).json({ message: "Failed to fetch tier info" });
+  }
+});
+
+// UPDATED: Checkout with tier selection
+router.post("/checkout-tier", verifyToken, async (req, res) => {
+  try {
+    const { tier } = req.body;
+
+    if (![1, 2, 3, 4].includes(tier)) {
+      return res.status(400).json({ message: "Invalid tier" });
+    }
+
+    const tierPriceMap = {
+      1: process.env.STRIPE_PRICE_TIER1,
+      2: process.env.STRIPE_PRICE_TIER2,
+      3: process.env.STRIPE_PRICE_TIER3,
+      4: process.env.STRIPE_PRICE_TIER4,
+    };
+
+    const priceId = tierPriceMap[tier];
+
+    if (!priceId) {
+      return res.status(500).json({ message: "Price not configured" });
+    }
+
+    const stripe = getStripe();
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    let customerId = user.stripeCustomerId;
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        metadata: { userId: user._id.toString() },
+      });
+      customerId = customer.id;
+      user.stripeCustomerId = customerId;
+      await user.save();
+    }
+
+    const baseUrl = getBaseUrl(req);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${baseUrl}/profile?checkout=success`,
+      cancel_url: `${baseUrl}/pricing`,
+      allow_promotion_codes: true,
+      client_reference_id: user._id.toString(),
+      subscription_data: {
+        metadata: { userId: user._id.toString(), tier: tier.toString() },
+      },
+    });
+
+    return res.json({ url: session.url });
+  } catch (error) {
+    console.error("Tier checkout error:", error.message);
+    return res.status(500).json({
+      message: process.env.NODE_ENV === 'production'
+        ? "Failed to create checkout session"
+        : `Failed to create checkout session: ${error.message}`
+    });
+  }
+});
+
+// LEGACY: Keep for backward compatibility
 router.post("/create-checkout-session", verifyToken, async (req, res) => {
   try {
     if (!process.env.STRIPE_PRICE_ID) {
@@ -169,7 +275,9 @@ router.post("/sync-subscription", verifyToken, async (req, res) => {
         subscriptionStatus: "",
         subscriptionCurrentPeriodEnd: null,
         hasPaid: false,
-        role: "guest"
+        role: "guest",
+        stripeCurrentTier: 0,
+        listingLimit: 0
       });
       console.log(`[Stripe] Sync: No subscriptions found for user ${user._id}`);
       return res.json({ 
@@ -185,6 +293,9 @@ router.post("/sync-subscription", verifyToken, async (req, res) => {
       ? new Date(subscription.current_period_end * 1000)
       : null;
 
+    // Extract price ID from subscription
+    const priceId = subscription.items?.data?.[0]?.price?.id;
+
     // Update user with Stripe data
     await upsertSubscriptionDetails({
       userId: user._id,
@@ -192,6 +303,7 @@ router.post("/sync-subscription", verifyToken, async (req, res) => {
       stripeSubscriptionId: subscription.id,
       status: subscription.status,
       currentPeriodEnd,
+      priceId, // NEW
     });
 
     // Fetch updated user
@@ -207,7 +319,9 @@ router.post("/sync-subscription", verifyToken, async (req, res) => {
         status: subscription.status,
         currentPeriodEnd,
         role: updatedUser.role,
-        hasPaid: updatedUser.hasPaid
+        hasPaid: updatedUser.hasPaid,
+        tier: updatedUser.stripeCurrentTier,
+        listingLimit: updatedUser.listingLimit
       }
     });
   } catch (error) {
@@ -256,6 +370,9 @@ const handleWebhook = async (req, res) => {
           ? new Date(subscription.current_period_end * 1000)
           : null;
 
+        // NEW: Extract price ID
+        const priceId = subscription.items?.data?.[0]?.price?.id;
+
         if (userId) {
           await upsertSubscriptionDetails({
             userId,
@@ -263,6 +380,7 @@ const handleWebhook = async (req, res) => {
             stripeSubscriptionId,
             status: subscription.status,
             currentPeriodEnd,
+            priceId, // NEW
           });
           console.log(`[Stripe] Subscription activated for user: ${userId}`);
         } else if (stripeCustomerId) {
@@ -274,6 +392,7 @@ const handleWebhook = async (req, res) => {
               stripeSubscriptionId,
               status: subscription.status,
               currentPeriodEnd,
+              priceId, // NEW
             });
             console.log(`[Stripe] Subscription activated for customer: ${stripeCustomerId}`);
           } else {
@@ -293,6 +412,9 @@ const handleWebhook = async (req, res) => {
           ? new Date(subscription.current_period_end * 1000)
           : null;
 
+        // NEW: Extract price ID
+        const priceId = subscription.items?.data?.[0]?.price?.id;
+
         const user = await User.findOne({
           $or: [
             { stripeCustomerId },
@@ -307,6 +429,7 @@ const handleWebhook = async (req, res) => {
             stripeSubscriptionId,
             status: subscription.status,
             currentPeriodEnd,
+            priceId, // NEW
           });
           console.log(`[Stripe] Subscription ${event.type === 'customer.subscription.deleted' ? 'deleted' : 'updated'} for user: ${user._id}`);
         } else {
@@ -322,6 +445,8 @@ const handleWebhook = async (req, res) => {
           user.subscriptionStatus = "past_due";
           user.hasPaid = false;
           user.role = "guest";
+          user.stripeCurrentTier = 0; // NEW: Reset tier
+          user.listingLimit = 0; // NEW: Reset limit
           await user.save();
           console.warn(`[Stripe] Payment failed for user: ${user._id}, reverted to guest`);
         } else {

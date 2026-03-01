@@ -37,7 +37,8 @@ const PropertySchema = new mongoose.Schema(
     category: { type: String }, // e.g. "apartment", "condo", etc.
     latitude: { type: Number, required: false },
     longitude: { type: Number, required: false },
-    isActive: { type: Boolean, default: false }, // Property is disabled until rooms are configured
+    isActive: { type: Boolean, default: false }, // DEPRECATED: use status field instead
+    status: { type: String, enum: ["active", "inactive"], default: "inactive" }, // Property starts inactive, host activates after setup
     // Host-defined unavailable periods
     blockedPeriods: [
       {
