@@ -92,8 +92,8 @@ export default function PropertyCard({
           </Typography>
           {showStatus && (
             <Chip
-              label={property.isActive ? "Active" : "Inactive"}
-              color={property.isActive ? "success" : "default"}
+              label={property.status == "active" ? "Active" : "Inactive"}
+              color={property.status == "active" ? "success" : "default"}
               size="small"
               sx={{ ml: "auto" }}
             />

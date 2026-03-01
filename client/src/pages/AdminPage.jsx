@@ -222,12 +222,14 @@ export default function AdminPage() {
       pricePerNight: listing.pricePerNight || 0,
       maxGuests: listing.maxGuests || 0,
       category: listing.category || '',
+      status: listing.status || '',
       isActive: listing.isActive || false,
     });
     setEditListingOpen(true);
   };
 
   const handleSaveListing = async () => {
+    console.log(listingFormData)
     try {
       const res = await fetchWithAuth(`${API_URL}/auth/admin/properties/${selectedListing._id}`, {
         method: 'PUT',
@@ -485,6 +487,7 @@ export default function AdminPage() {
                       <TableCell><strong>Host</strong></TableCell>
                       <TableCell><strong>Price/Night</strong></TableCell>
                       <TableCell><strong>Category</strong></TableCell>
+                      <TableCell><strong>Status</strong></TableCell>
                       <TableCell><strong>Active</strong></TableCell>
                       <TableCell><strong>Actions</strong></TableCell>
                     </TableRow>
@@ -498,8 +501,15 @@ export default function AdminPage() {
                         <TableCell>{listing.category}</TableCell>
                         <TableCell>
                           <Chip 
-                            label={listing.status || (listing.isActive ? 'active' : 'inactive')} 
-                            color={(listing.status || (listing.isActive ? 'active' : 'inactive')) === 'active' ? 'success' : 'error'} 
+                            label={listing.status} 
+                            color={listing.status == 'active' ? 'success' : 'default'} 
+                            size="small" 
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={listing.isActive ? 'Y' : 'N'} 
+                            color={((listing.isActive ? 'active' : 'inactive')) === 'active' ? 'success' : 'error'} 
                             size="small" 
                           />
                         </TableCell>
@@ -771,6 +781,12 @@ export default function AdminPage() {
             onChange={(e) => setListingFormData({ ...listingFormData, category: e.target.value })}
             fullWidth
           />
+          <TextField
+            label="Status"
+            value={listingFormData.status || ''}
+            onChange={(e) => setListingFormData({ ...listingFormData, status: e.target.value })}
+            fullWidth
+          />
           <FormControlLabel
             control={
               <Checkbox
@@ -778,7 +794,7 @@ export default function AdminPage() {
                 onChange={(e) => setListingFormData({ ...listingFormData, isActive: e.target.checked })}
               />
             }
-            label="Active"
+            label="is active"
           />
         </DialogContent>
         <DialogActions>

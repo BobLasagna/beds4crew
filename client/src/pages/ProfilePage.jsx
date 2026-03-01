@@ -485,7 +485,7 @@ export default function ProfilePage() {
           <Box display="flex" gap={2} flexWrap="wrap">
             <Box>
               <Typography variant="caption" color="text.secondary">Active listings</Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>{listings.length}</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>{tierInfo.activeListings}</Typography>
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">Rating</Typography>
