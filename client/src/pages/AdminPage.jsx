@@ -143,6 +143,7 @@ export default function AdminPage() {
   };
 
   // User edit handlers
+  // User edit handlers
   const handleEditUser = (user) => {
     setSelectedUser(user);
     setUserFormData({
@@ -151,8 +152,14 @@ export default function AdminPage() {
       email: user.email || '',
       role: user.role || 'guest',
       hasPaid: user.hasPaid || false,
+      stripeCurrentTier: user.stripeCurrentTier || 0,
+      listingLimit: user.listingLimit || 0,
+      subscriptionStatus: user.subscriptionStatus || '',
+      stripeSubscriptionId: user.stripeSubscriptionId || ''
     });
     setEditUserOpen(true);
+  };
+
   };
 
   const handleClearCache = async () => {
