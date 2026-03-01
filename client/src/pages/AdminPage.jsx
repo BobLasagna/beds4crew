@@ -150,6 +150,7 @@ export default function AdminPage() {
       lastName: user.lastName || '',
       email: user.email || '',
       role: user.role || 'guest',
+      isActive: user.isActive !== false,
       hasPaid: user.hasPaid || false,
       stripeCurrentTier: user.stripeCurrentTier || 0,
       listingLimit: user.listingLimit || 0,
@@ -410,23 +411,12 @@ export default function AdminPage() {
                   </TableHead>
                   <TableBody>
                     {users.map(user => {
+                      const isAccountActive = user.isActive !== false;
                       const subStatus = user.subscriptionStatus || '';
-                      const isActive = ['active', 'trialing'].includes(subStatus);
                       const hasStripe = Boolean(user.stripeCustomerId);
                       
-                      let displayLabel = 'No subscription';
-                      let displayColor = 'default';
-                      
-                      if (isActive) {
-                        displayLabel = subStatus === 'trialing' ? 'Trial' : 'Active';
-                        displayColor = 'success';
-                      } else if (hasStripe && subStatus) {
-                        displayLabel = subStatus.replace('_', ' ');
-                        displayColor = 'warning';
-                      } else if (user.hasPaid) {
-                        displayLabel = 'Legacy paid';
-                        displayColor = 'info';
-                      }
+                      let displayLabel = isAccountActive ? 'Active' : 'Inactive';
+                      let displayColor = isAccountActive ? 'success' : 'error';
                       
                       return (
                         <TableRow key={user._id}>
@@ -653,6 +643,15 @@ export default function AdminPage() {
               />
             }
             label="Has Paid (Verified)"
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={userFormData.isActive !== false}
+                onChange={(e) => setUserFormData({ ...userFormData, isActive: e.target.checked })}
+              />
+            }
+            label="Account Active"
           />
           {selectedUser && (
             <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid #ddd' }}>

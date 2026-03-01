@@ -34,6 +34,7 @@ router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
       lastName, 
       role, 
       hasPaid,
+      isActive,
       stripeCurrentTier,
       listingLimit,
       subscriptionStatus,
@@ -41,6 +42,9 @@ router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
     } = req.body;
     
     const updateData = { firstName, lastName, role, hasPaid };
+    
+    // Allow admin to set account active status
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
     
     // Allow admin to manually set subscription details
     if (stripeCurrentTier !== undefined) updateData.stripeCurrentTier = parseInt(stripeCurrentTier);

@@ -23,6 +23,7 @@ const UserSchema = new mongoose.Schema(
     
     role: { type: String, enum: ["guest", "host"], default: "guest" },
     hasPaid: { type: Boolean, default: false }, // Flag for hosts who have paid
+    isActive: { type: Boolean, default: true }, // User account status
 
     // Stripe subscription details
     stripeCustomerId: { type: String, default: "" },
