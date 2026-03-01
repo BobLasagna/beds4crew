@@ -143,7 +143,6 @@ export default function AdminPage() {
   };
 
   // User edit handlers
-  // User edit handlers
   const handleEditUser = (user) => {
     setSelectedUser(user);
     setUserFormData({
@@ -158,8 +157,6 @@ export default function AdminPage() {
       stripeSubscriptionId: user.stripeSubscriptionId || ''
     });
     setEditUserOpen(true);
-  };
-
   };
 
   const handleClearCache = async () => {
