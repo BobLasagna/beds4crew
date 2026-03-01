@@ -26,13 +26,31 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-// Update user
+// Update user (including subscription details)
 router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const { firstName, lastName, role, hasPaid } = req.body;
+    const { 
+      firstName, 
+      lastName, 
+      role, 
+      hasPaid,
+      stripeCurrentTier,
+      listingLimit,
+      subscriptionStatus,
+      stripeSubscriptionId
+    } = req.body;
+    
+    const updateData = { firstName, lastName, role, hasPaid };
+    
+    // Allow admin to manually set subscription details
+    if (stripeCurrentTier !== undefined) updateData.stripeCurrentTier = parseInt(stripeCurrentTier);
+    if (listingLimit !== undefined) updateData.listingLimit = parseInt(listingLimit);
+    if (subscriptionStatus !== undefined) updateData.subscriptionStatus = subscriptionStatus;
+    if (stripeSubscriptionId !== undefined) updateData.stripeSubscriptionId = stripeSubscriptionId;
+    
     const user = await User.findByIdAndUpdate(
       req.params.userId,
-      { firstName, lastName, role, hasPaid },
+      updateData,
       { new: true }
     ).select("-password");
 

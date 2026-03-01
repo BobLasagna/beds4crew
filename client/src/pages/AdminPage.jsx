@@ -399,6 +399,7 @@ export default function AdminPage() {
                       <TableCell><strong>Name</strong></TableCell>
                       <TableCell><strong>Email</strong></TableCell>
                       <TableCell><strong>Role</strong></TableCell>
+                      <TableCell><strong>Tier</strong></TableCell>
                       <TableCell><strong>Subscription</strong></TableCell>
                       <TableCell><strong>Actions</strong></TableCell>
                     </TableRow>
@@ -429,6 +430,18 @@ export default function AdminPage() {
                           <TableCell>{user.email}</TableCell>
                           <TableCell>
                             <Chip label={user.role} color={user.role === 'host' ? 'primary' : 'default'} size="small" />
+                          </TableCell>
+                          <TableCell>
+                            {user.stripeCurrentTier ? (
+                              <Chip 
+                                label={`Tier ${user.stripeCurrentTier} (${user.listingLimit} listings)`}
+                                color="primary"
+                                variant="outlined"
+                                size="small"
+                              />
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">Free</Typography>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Chip label={displayLabel} color={displayColor} size="small" />
@@ -490,7 +503,11 @@ export default function AdminPage() {
                         <TableCell>${listing.pricePerNight}</TableCell>
                         <TableCell>{listing.category}</TableCell>
                         <TableCell>
-                          <Chip label={listing.isActive ? 'Yes' : 'No'} color={listing.isActive ? 'success' : 'error'} size="small" />
+                          <Chip 
+                            label={listing.status || (listing.isActive ? 'active' : 'inactive')} 
+                            color={(listing.status || (listing.isActive ? 'active' : 'inactive')) === 'active' ? 'success' : 'error'} 
+                            size="small" 
+                          />
                         </TableCell>
                         <TableCell>
                           <IconButton size="small" onClick={() => handleEditListing(listing)} color="primary">
@@ -634,17 +651,74 @@ export default function AdminPage() {
             label="Has Paid (Verified)"
           />
           {selectedUser && (
-            <Box sx={{ mt: 1, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Subscription Details</Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Stripe Customer:</strong> {selectedUser.stripeCustomerId || 'None'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Status:</strong> {selectedUser.subscriptionStatus || 'No subscription'}
-              </Typography>
-              {selectedUser.subscriptionCurrentPeriodEnd && (
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Period End:</strong> {new Date(selectedUser.subscriptionCurrentPeriodEnd).toLocaleDateString()}
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid #ddd' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2 }}>🔗 Subscription Management</Typography>
+              
+              <TextField
+                select
+                label="Current Tier"
+                value={userFormData.stripeCurrentTier || 0}
+                onChange={(e) => {
+                  const tier = parseInt(e.target.value);
+                  const tierLimits = { 0: 0, 1: 2, 2: 5, 3: 10, 4: 25 };
+                  setUserFormData({
+                    ...userFormData,
+                    stripeCurrentTier: tier,
+                    listingLimit: tierLimits[tier]
+                  });
+                }}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              >
+                <MenuItem value={0}>Free (0 listings)</MenuItem>
+                <MenuItem value={1}>Basic - $5/mo (2 listings)</MenuItem>
+                <MenuItem value={2}>Growth - $15/mo (5 listings)</MenuItem>
+                <MenuItem value={3}>Professional - $30/mo (10 listings)</MenuItem>
+                <MenuItem value={4}>Enterprise - $75/mo (25+ listings)</MenuItem>
+              </TextField>
+
+              <TextField
+                label="Listing Limit"
+                type="number"
+                value={userFormData.listingLimit || 0}
+                onChange={(e) => setUserFormData({ ...userFormData, listingLimit: parseInt(e.target.value) || 0 })}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+                helperText="Auto-set when tier is selected"
+              />
+
+              <TextField
+                select
+                label="Subscription Status"
+                value={userFormData.subscriptionStatus || ''}
+                onChange={(e) => setUserFormData({ ...userFormData, subscriptionStatus: e.target.value })}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              >
+                <MenuItem value="">None</MenuItem>
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="trialing">Trialing</MenuItem>
+                <MenuItem value="past_due">Past Due</MenuItem>
+                <MenuItem value="canceled">Canceled</MenuItem>
+                <MenuItem value="incomplete">Incomplete</MenuItem>
+              </TextField>
+
+              <TextField
+                label="Stripe Subscription ID"
+                value={userFormData.stripeSubscriptionId || ''}
+                onChange={(e) => setUserFormData({ ...userFormData, stripeSubscriptionId: e.target.value })}
+                fullWidth
+                size="small"
+                placeholder="sub_xxxxxxxxx or leave empty"
+                helperText="From Stripe dashboard (optional)"
+              />
+
+              {selectedUser.stripeCustomerId && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+                  <strong>Stripe Customer ID:</strong> {selectedUser.stripeCustomerId}
                 </Typography>
               )}
             </Box>
