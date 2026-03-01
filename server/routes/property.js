@@ -437,7 +437,7 @@ router.put("/:id", verifyToken, async (req, res) => {
         }
       }
       property.status = req.body.status;
-    }    }
+    }    
 
     await property.save();
 

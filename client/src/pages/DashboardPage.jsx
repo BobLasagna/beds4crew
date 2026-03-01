@@ -56,7 +56,7 @@ export default function DashboardPage() {
   const handleSignUpForHosting = () => {
     snackbar("Please check account settings", "success");
     setTimeout(() => {
-      navigate("/profile");
+      navigate("/pricing");
     }, 1500);
   };
   
