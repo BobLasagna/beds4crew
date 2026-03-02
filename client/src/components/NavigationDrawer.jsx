@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   AppBar,
   Toolbar,
@@ -19,8 +19,9 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  useMediaQuery,
-  Chip,
+  BottomNavigation,
+  BottomNavigationAction,
+  Paper
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import HomeIcon from "@mui/icons-material/Home";
@@ -40,7 +41,8 @@ import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import { useNavigate } from "react-router-dom";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { logout, fetchWithAuth, API_URL } from "../utils/api";
 import { useThemeMode } from "../contexts/ThemeContext";
@@ -69,11 +71,13 @@ export default function NavigationDrawer({ children }) {
   const [previousUnreadCount, setPreviousUnreadCount] = useState(0);
   const [pollInterval, setPollInterval] = useState(5000);
   const [accountAnchor, setAccountAnchor] = useState(null);
+  const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const snackbar = useSnackbar();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const { mode, toggleTheme } = useThemeMode();
-  const isDesktop = useMediaQuery((theme) => theme.breakpoints.up("md"));
 
   useEffect(() => {
     if (!isEmpty(user)) {
@@ -91,6 +95,26 @@ export default function NavigationDrawer({ children }) {
       setPollInterval(5000);
     }
   }, [open]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const lastScrollY = lastScrollYRef.current;
+
+      if (currentScrollY <= 16) {
+        setMobileNavVisible(true);
+      } else if (currentScrollY > lastScrollY + 8) {
+        setMobileNavVisible(false);
+      } else if (currentScrollY < lastScrollY - 8) {
+        setMobileNavVisible(true);
+      }
+
+      lastScrollYRef.current = currentScrollY;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const fetchUnreadCount = async () => {
     try {
@@ -153,6 +177,29 @@ export default function NavigationDrawer({ children }) {
     setAccountAnchor(null);
   };
 
+  const handleMessagesNavigation = () => {
+    if (user.role === "host") {
+      navigate("/reservations");
+    } else if (user.role === "guest") {
+      navigate("/trips");
+    } else {
+      navigate("/login");
+    }
+  };
+
+  const getMobileNavValue = () => {
+    if (location.pathname === "/") {
+      return "home";
+    }
+    if (location.pathname.startsWith("/properties") || location.pathname.startsWith("/browse")) {
+      return "explore";
+    }
+    if (location.pathname.startsWith("/reservations") || location.pathname.startsWith("/trips")) {
+      return "messages";
+    }
+    return false;
+  };
+
   const drawer = (
     <Box sx={{ width: drawerWidth }}>
       <Box sx={{ px: 2, py: 2, cursor: "pointer" }} onClick={() => setOpen(false)}>
@@ -171,11 +218,11 @@ export default function NavigationDrawer({ children }) {
         </ListItemButton>
         <ListItemButton onClick={() => (clickedIconLink("/properties"))}>
           <ListItemIcon><HotelIcon /></ListItemIcon>
-          <ListItemText primary="Explore" />
+          <ListItemText primary="All Properties" />
         </ListItemButton>
         <ListItemButton onClick={() => (clickedIconLink("/browse"))}>
           <ListItemIcon><PublicIcon /></ListItemIcon>
-          <ListItemText primary="Map View" />
+          <ListItemText primary="Search By Date" />
         </ListItemButton>
         <ListItemButton onClick={() => (clickedIconLink("/support"))}>
           <ListItemIcon><SupportIcon /></ListItemIcon>
@@ -225,7 +272,7 @@ export default function NavigationDrawer({ children }) {
         )}
         {user.role === "host" && (
           <>
-            <ListItemButton onClick={() => (clickedIconLink("/my-listings"))}>
+            <ListItemButton onClick={() => (clickedIconLink("/profile?tab=listings#listings-tab"))}>
               <ListItemIcon><BusinessIcon /></ListItemIcon>
               <ListItemText primary="My Listings" />
             </ListItemButton>
@@ -273,25 +320,28 @@ export default function NavigationDrawer({ children }) {
               <MenuIcon />
             </Badge>
           </IconButton>
-            <Box sx={{ display: "flex", alignItems: "baseline", flexDirection: { xs: "column", sm: "row" }, gap: 1 }}>
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{ fontWeight: 800, cursor: "pointer" }}
-            onClick={handleTitleClick}
+          <Box sx={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{ fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
+              onClick={handleTitleClick}
             >
-            Beds4Crew
-          </Typography>
-              <Button variant="text" sx={{ fontWeight: 600 }} onClick={() => navigate("/properties")}>Explore</Button>
+              Beds4Crew
+            </Typography>
+
+            <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center", ml: 2, gap: 1 }}>
+              <Button variant="text" sx={{ fontWeight: 600 }} onClick={() => navigate("/properties")}>All Properties</Button>
               <Button variant="text" sx={{ fontWeight: 600 }} onClick={() => navigate("/browse")}>Search by Date</Button>
             </Box>
+          </Box>
             
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: "auto" }}>
+          <Box sx={{ display: "flex", alignItems: "center", p: 1, gap: 1 }}>
             {user.role === "host" && (
               <Button
                 variant="outlined"
                 size="small"
-                sx={{ display: { xs: "none", md: "inline-flex" }, color: "warning.main", borderColor: "warning.main" }}
+                sx={{ display: { xs: "none", md: "flex" }, flex: "none", color: "warning.main", borderColor: "warning.main" }}
                 onClick={() => navigate("/pricing")}
               >
                 💰 Upgrade Plan
@@ -300,7 +350,7 @@ export default function NavigationDrawer({ children }) {
             <Button
               variant="contained"
               color="primary"
-              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+              sx={{ display: { xs: "none", sm: "flex" }, flex: "none" }}
               onClick={() => {
                 if (user.role === "host") {
                   navigate("/add-property");
@@ -314,15 +364,8 @@ export default function NavigationDrawer({ children }) {
             <IconButton
               color="inherit"
               aria-label="Messages"
-              onClick={() => {
-                if (user.role === "host") {
-                  navigate("/reservations");
-                } else if (user.role === "guest") {
-                  navigate("/trips");
-                } else {
-                  navigate("/support?topic=messages");
-                }
-              }}
+              sx={{ display: { xs: "none", md: "inline-flex" } }}
+              onClick={handleMessagesNavigation}
             >
               <Badge badgeContent={unreadCount} color="error">
                 <MessageIcon />
@@ -331,15 +374,29 @@ export default function NavigationDrawer({ children }) {
             <IconButton
               color="inherit"
               aria-label="Support"
+              sx={{ display: { xs: "none", md: "inline-flex" } }}
               onClick={() => navigate("/support#top")}
             >
               <SupportAgentIcon />
             </IconButton>
-            <IconButton color="inherit" onClick={handleAccountMenu} aria-label="Account menu">
+            {!isEmpty(user) ? (
+              <IconButton color="inherit" onClick={handleAccountMenu} aria-label="Account menu">
               <Avatar sx={{ width: 32, height: 32 }}>
-                {user.firstName?.[0] || "U"}
+                {user.firstName?.[0] || "?"}
               </Avatar>
             </IconButton>
+            ) : (
+              <>
+                <IconButton
+                  color="inherit"
+                  aria-label="Sign in"
+                  sx={{ display: { xs: "inline-flex" } }}
+                  onClick={() => navigate("/login")}
+                >
+                  <AccountCircleIcon />
+                </IconButton>
+              </>
+            )}
           </Box>
         </Toolbar>
       </AppBar>
@@ -360,7 +417,7 @@ export default function NavigationDrawer({ children }) {
                 : []),
               ...(user.role === "host"
                 ? [
-                    <MenuItem key="listings" onClick={() => { closeAccountMenu(); navigate("/my-listings"); }}>Listings</MenuItem>,
+                    <MenuItem key="listings" onClick={() => { closeAccountMenu(); navigate("/profile?tab=listings#listings-tab"); }}>Listings</MenuItem>,
                     <MenuItem key="reservations" onClick={() => { closeAccountMenu(); navigate("/reservations"); }}>Reservations</MenuItem>,
                     <MenuItem key="pricing" onClick={() => { closeAccountMenu(); navigate("/pricing"); }}>Pricing & Plans</MenuItem>,
                   ]
@@ -385,9 +442,56 @@ export default function NavigationDrawer({ children }) {
         {drawer}
       </Drawer>
 
-      <Box component="main" sx={{ flex: 1, py: { xs: 2, md: 4 } }}>
+      <Box component="main" sx={{ flex: 1, py: { xs: 2, md: 4 }, pb: { xs: 10, md: 4 } }}>
         {children}
       </Box>
+
+      <Paper
+        elevation={6}
+        sx={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
+          borderTop: 1,
+          borderColor: "divider",
+          display: { xs: "block", md: "none" },
+          transform: mobileNavVisible ? "translateY(0)" : "translateY(100%)",
+          transition: "transform 220ms ease",
+        }}
+      >
+        <BottomNavigation showLabels value={getMobileNavValue()}>
+          <BottomNavigationAction
+            label="Home"
+            value="home"
+            icon={<HomeIcon />}
+            onClick={() => navigate("/")}
+          />
+          <BottomNavigationAction
+            label="Search"
+            value="explore"
+            icon={<PublicIcon />}
+            onClick={() => navigate("/browse")}
+          />
+          <BottomNavigationAction
+            label="Messages"
+            value="messages"
+            icon={(
+              <Badge badgeContent={unreadCount} color="error">
+                <MessageIcon />
+              </Badge>
+            )}
+            onClick={handleMessagesNavigation}
+          />
+          <BottomNavigationAction
+            label="Menu"
+            value="menu"
+            icon={<MoreHorizIcon />}
+            onClick={() => setOpen(true)}
+          />
+        </BottomNavigation>
+      </Paper>
       <SiteFooter />
     </Box>
   );

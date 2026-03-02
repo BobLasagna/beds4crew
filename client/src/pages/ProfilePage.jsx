@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   TextField,
@@ -11,7 +11,6 @@ import {
   Tab,
   Grid,
   Card,
-  CardContent,
   Divider,
   Switch,
   FormControlLabel,
@@ -24,11 +23,13 @@ import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { getListingMetrics } from "../utils/helpers";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
 
 export default function ProfilePage() {
-  const navigate = useNavigate();  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const navigate = useNavigate();  const location = useLocation();
+  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const listingsTabRef = useRef(null);
   const [tab, setTab] = useState(0);
   const [listings, setListings] = useState([]);
   const [form, setForm] = useState({
@@ -124,6 +125,26 @@ export default function ProfilePage() {
     const checkoutStatus = params.get("checkout");
     if (checkoutStatus === "success") {
       snackbar("Subscription activated successfully", "success");
+      fetchWithAuth(`${API_URL}/billing/sync-subscription`, { method: "POST" })
+        .then((res) => res.ok ? res.json() : null)
+        .then(async (syncData) => {
+          if (!syncData?.synced) return;
+          const userRes = await fetchWithAuth(`${API_URL}/auth/me`);
+          if (!userRes.ok) return;
+          const userData = await userRes.json();
+          const updatedUser = {
+            ...storedUser,
+            ...userData,
+            id: userData._id || userData.id || storedUser.id,
+          };
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+          setSubscriptionInfo({
+            status: userData.subscriptionStatus || "",
+            currentPeriodEnd: userData.subscriptionCurrentPeriodEnd || null,
+            hasPaid: userData.hasPaid || false,
+          });
+        })
+        .catch(() => {});
     } else if (checkoutStatus === "cancel") {
       snackbar("Subscription checkout canceled", "info");
     }
@@ -323,52 +344,8 @@ export default function ProfilePage() {
     }
   };
 
-  const handleStartSubscription = async () => {
-    try {
-      setBillingLoading(true);
-      const res = await fetchWithAuth(`${API_URL}/billing/create-checkout-session`, {
-        method: "POST",
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        
-        // Handle duplicate subscription case
-        if (errorData?.hasActiveSubscription) {
-          snackbar("You already have an active subscription", "info");
-          // Refresh user data to sync subscription status
-          const userRes = await fetchWithAuth(`${API_URL}/auth/me`);
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            const updatedUser = {
-              ...storedUser,
-              ...userData,
-              id: userData._id || userData.id || storedUser.id,
-            };
-            localStorage.setItem("user", JSON.stringify(updatedUser));
-            setSubscriptionInfo({
-              status: userData.subscriptionStatus || "",
-              currentPeriodEnd: userData.subscriptionCurrentPeriodEnd || null,
-              hasPaid: userData.hasPaid || false,
-            });
-          }
-          return;
-        }
-        
-        throw new Error(errorData?.message || "Failed to start checkout");
-      }
-
-      const data = await res.json();
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error("Checkout URL missing");
-      }
-    } catch (error) {
-      snackbar(error.message || "Failed to start subscription", "error");
-    } finally {
-      setBillingLoading(false);
-    }
+  const handleStartSubscription = () => {
+    navigate("/pricing");
   };
 
   const handleManageSubscription = async () => {
@@ -444,6 +421,19 @@ export default function ProfilePage() {
     ? new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString()
     : null;
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get("tab");
+
+    if (tabParam === "listings") {
+      setTab(0);
+
+      window.requestAnimationFrame(() => {
+        listingsTabRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [location.search]);
+
   return (
     <Box sx={commonStyles.contentContainer}>
       <Card sx={{ p: { xs: 3, md: 4 }, borderRadius: 3, mb: 3 }}>
@@ -499,7 +489,7 @@ export default function ProfilePage() {
         </Box>
       </Card>
 
-      <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 3 }}>
+      <Tabs id="listings-tab" ref={listingsTabRef} value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 3 }}>
         <Tab label="Listings" />
         <Tab label="Portfolio" />
         <Tab label="Account settings" />
@@ -672,9 +662,8 @@ export default function ProfilePage() {
                 <Button
                   variant="contained"
                   onClick={handleStartSubscription}
-                  disabled={billingLoading}
                 >
-                  {billingLoading ? "Redirecting..." : "Start subscription"}
+                  Choose a plan
                 </Button>
               )}
               <Button

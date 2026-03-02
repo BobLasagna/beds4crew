@@ -18,14 +18,15 @@
     "question": "How do I become a host?",
     "summary": "Open your profile and use Account Settings to start hosting setup.",
     "status": "active",
-    "answer": "Navigate to your profile, access Account Settings, and select Start Subscription to activate hosting features. Your account will be reviewed and activated within 24 hours.",
+    "answer": "Navigate to your profile, access Account Settings, and choose a plan to activate hosting features. After payment succeeds, your account is upgraded to host with listing limits based on your selected tier.",
     "steps": [
       "Make sure you're logged in.",
       "Go to your Profile page.",
       "Click Account Settings.",
       "Scroll down to Host Status.",
-      "Select Start Subscription.",
-      "Your account should be activated for hosting within 24 hours. You can then create your first listing from the Host dashboard."
+      "Select Choose a plan.",
+      "Pick a tier and complete checkout.",
+      "After successful payment, your account becomes a host with tier-based listing limits."
     ]
   },
   {

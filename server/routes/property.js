@@ -19,20 +19,14 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
     }
 
 
-    // NEW: Check listing limit
+    // Check listing limit for active listings
     const activeListings = await Property.countDocuments({
       ownerHost: user._id,
       status: "active"
     });
+    const hasReachedListingLimit = activeListings >= user.listingLimit;
 
-    if (activeListings >= user.listingLimit) {
-      return res.status(403).json({
-        message: `You've reached your listing limit (${user.listingLimit}). Upgrade your plan to add more.`,
-        currentListings: activeListings,
-        limit: user.listingLimit,
-        tier: user.stripeCurrentTier
-      });
-    }    const { title, type, description, pricePerNight, address, maxGuests, facilities, category, city, country, rooms } = req.body;
+    const { title, type, description, pricePerNight, address, maxGuests, facilities, category, city, country, rooms } = req.body;
     
     // Cloudinary returns the full URL in file.path
     const images = req.files?.map(file => {
@@ -79,8 +73,8 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
       }
     }
 
-    // Property is only active if it has rooms configured
-    const status = parsedRooms.length > 0 ? "active" : "inactive";
+    // Property is only active if it has rooms configured and user is within listing limit
+    const status = parsedRooms.length > 0 && !hasReachedListingLimit ? "active" : "inactive";
 
     const property = new Property({
       ownerHost: req.user.id,
@@ -99,12 +93,24 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
       latitude,
       longitude,
       status,
+      inactiveReason: hasReachedListingLimit ? "listing_limit" : undefined,
     });
     await property.save();
     
     // Clear cache after creation
     cache.delete("properties:all");
     
+    if (hasReachedListingLimit) {
+      return res.status(201).json({
+        property,
+        limitReached: true,
+        message: `You've reached your listing limit (${user.listingLimit}). Listing saved as inactive.`,
+        currentListings: activeListings,
+        limit: user.listingLimit,
+        tier: user.stripeCurrentTier
+      });
+    }
+
     res.status(201).json(property);
   } catch (error) {
     res.status(500).json({ message: "Property creation failed", error: error.message });
@@ -437,6 +443,10 @@ router.put("/:id", verifyToken, async (req, res) => {
         }
       }
       property.status = req.body.status;
+
+      if (req.body.status === "active") {
+        property.inactiveReason = undefined;
+      }
     }    
 
     await property.save();

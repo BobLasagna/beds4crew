@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Box, Typography, Card, FormControl, InputLabel, Select, MenuItem, 
-  Checkbox, FormControlLabel, Alert, Chip, Button, Divider
+  Checkbox, FormControlLabel, Alert, Divider
 } from "@mui/material";
 import PersonIcon from "@mui/icons-material/Person";
 import BedIcon from "@mui/icons-material/Bed";
@@ -221,9 +221,9 @@ export default function BedSelector({ property, startDate, endDate, onSelectionC
         </FormControl>
 
         {totalPrice > 0 && (
-          <Card sx={{ p: 2, bgcolor: 'primary.light' }}>
-            <Typography variant="h6">
-              Total: ${totalPrice} ({nights} {nights === 1 ? 'night' : 'nights'})
+          <Card sx={{ p: 1, bgcolor: 'secondary.light' }}>
+            <Typography variant="body2" color="primary.light">
+              Estimated amount: ${totalPrice} ({nights} {nights === 1 ? 'night' : 'nights'})
             </Typography>
           </Card>
         )}

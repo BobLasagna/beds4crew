@@ -9,7 +9,10 @@ Ensure these are set in your production environment:
 - [ ] `JWT_SECRET` - Strong random string for access tokens
 - [ ] `JWT_REFRESH_SECRET` - Strong random string for refresh tokens
 - [ ] `STRIPE_SECRET_KEY` - Stripe production secret key (starts with `sk_live_`)
-- [ ] `STRIPE_PRICE_ID` - Stripe production price ID (starts with `price_`)
+- [ ] `STRIPE_PRICE_TIER1` - Stripe Basic plan price ID (starts with `price_`)
+- [ ] `STRIPE_PRICE_TIER2` - Stripe Growth plan price ID (starts with `price_`)
+- [ ] `STRIPE_PRICE_TIER3` - Stripe Professional plan price ID (starts with `price_`)
+- [ ] `STRIPE_PRICE_TIER4` - Stripe Enterprise plan price ID (starts with `price_`)
 - [ ] `STRIPE_WEBHOOK_SECRET` - Stripe production webhook secret (starts with `whsec_`)
 - [ ] `CLIENT_URL` - Your production domain (e.g., `https://yourdomain.com`)
 - [ ] `NODE_ENV=production` - **CRITICAL** for security and performance
@@ -32,11 +35,15 @@ Ensure these are set in your production environment:
 - [ ] Copy "Secret key" (starts with `sk_live_`)
 - [ ] Add to environment: `STRIPE_SECRET_KEY=sk_live_...`
 
-### 3. Create Production Price
-- [ ] Go to Products → Add product
-- [ ] Set name, description, and price
-- [ ] Copy Price ID (starts with `price_`)
-- [ ] Add to environment: `STRIPE_PRICE_ID=price_...`
+### 3. Create Production Tier Prices
+- [ ] Go to Products → Add product (one product/price per tier)
+- [ ] Create prices for Basic, Growth, Professional, Enterprise
+- [ ] Copy each Price ID (starts with `price_`)
+- [ ] Add to environment:
+  - `STRIPE_PRICE_TIER1=price_...`
+  - `STRIPE_PRICE_TIER2=price_...`
+  - `STRIPE_PRICE_TIER3=price_...`
+  - `STRIPE_PRICE_TIER4=price_...`
 
 ### 4. Configure Webhooks
 - [ ] Go to Developers → Webhooks

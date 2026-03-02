@@ -41,10 +41,10 @@ The following fields are automatically updated in the User model:
 
 ## API Endpoints
 
-### 1. Create Checkout Session
-**POST** `/api/billing/create-checkout-session`
+### 1. Create Tier Checkout Session
+**POST** `/api/billing/checkout-tier`
 
-Starts the subscription checkout process.
+Starts the tiered subscription checkout process.
 
 **Headers:** `Authorization: Bearer <accessToken>`
 
@@ -55,11 +55,10 @@ Starts the subscription checkout process.
 }
 ```
 
-**Error (if already subscribed):**
+**Request body:**
 ```json
 {
-  "message": "You already have an active subscription",
-  "hasActiveSubscription": true
+  "tier": 1
 }
 ```
 
@@ -148,8 +147,8 @@ The system handles the following Stripe webhook events:
 ### Subscription Purchase Flow
 
 ```
-1. User clicks "Become a Host" / "Subscribe"
-2. Frontend calls POST /api/billing/create-checkout-session
+1. User clicks "Choose a plan"
+2. Frontend calls POST /api/billing/checkout-tier with selected tier
 3. If no active subscription exists:
    - Create/retrieve Stripe customer
    - Create checkout session
@@ -206,25 +205,21 @@ const checkSubscriptionStatus = async () => {
 };
 ```
 
-### Start Subscription
+### Start Subscription (Tiered)
 
 ```javascript
 const startSubscription = async () => {
   try {
-    const response = await fetch('/api/billing/create-checkout-session', {
+    const response = await fetch('/api/billing/checkout-tier', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ tier: 1 })
     });
     
     const data = await response.json();
-    
-    if (data.hasActiveSubscription) {
-      alert('You already have an active subscription!');
-      return;
-    }
     
     // Redirect to Stripe Checkout
     window.location.href = data.url;
@@ -262,8 +257,11 @@ const manageSubscription = async () => {
 ```env
 # Stripe Configuration
 STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PRICE_ID=price_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_TIER1=price_...
+STRIPE_PRICE_TIER2=price_...
+STRIPE_PRICE_TIER3=price_...
+STRIPE_PRICE_TIER4=price_...
 
 # Client URL for redirects
 CLIENT_URL=http://localhost:5173

@@ -237,18 +237,20 @@ export default function PropertyDetailPage() {
   const handleToggleActive = async () => {
     try {
       setLoading(true);
+      const nextStatus = property.status === "active" ? "inactive" : "active";
       const res = await fetchWithAuth(`${API_URL}/properties/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !property.isActive })
+        body: JSON.stringify({ status: nextStatus })
       });
-      if (!res.ok) throw new Error("Failed to update property");
-      const updated = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to update property");
+      const updated = data;
       setProperty(updated);
-      snackbar(`Property ${updated.isActive ? "activated" : "disabled"} successfully`);
+      snackbar(`Property ${updated.status === "active" ? "activated" : "disabled"} successfully`);
       window.location.reload();
     } catch (err) {
-      snackbar("Failed to update property", "error");
+      snackbar(err.message || "Failed to update property", "error");
     } finally {
       setLoading(false);
     }
@@ -388,6 +390,7 @@ export default function PropertyDetailPage() {
   if (!property) return <LoadingState message="Loading property details..." />;
 
   const nights = startDate && endDate ? dayjs(endDate).startOf("day").diff(dayjs(startDate).startOf("day"), "day") : 0;
+  const isPropertyActive = property.status === "active";
   
   // Check if host has paid
   const hostHasPaid = property.ownerHost?.hasPaid === true;
@@ -403,7 +406,7 @@ export default function PropertyDetailPage() {
         </Alert>
       )}
 
-      {isOwner && !property.isActive && (
+      {isOwner && !isPropertyActive && (
         <Alert severity="info" sx={commonStyles.sectionSpacing}>
           <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={1}>
             <Typography variant="body2">Your property is inactive. Edit details and configure rooms & beds to activate.</Typography>
@@ -416,30 +419,30 @@ export default function PropertyDetailPage() {
         <Card sx={{
           ...commonStyles.sectionSpacing,
           p: 2,
-          bgcolor: (theme) => property.isActive
+          bgcolor: (theme) => isPropertyActive
             ? theme.palette.mode === 'dark' ? 'success.dark' : '#e8f5e9'
             : theme.palette.mode === 'dark' ? 'error.dark' : '#ffebee',
-          border: (theme) => `1px solid ${property.isActive
+          border: (theme) => `1px solid ${isPropertyActive
             ? theme.palette.mode === 'dark' ? theme.palette.success.main : '#4caf50'
             : theme.palette.mode === 'dark' ? theme.palette.error.main : '#f44336'}`
         }}>
           <Box display="flex" flexDirection={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={2}>
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: (theme) => theme.palette.mode === 'dark' ? 'common.white' : 'text.primary' }}>
-                {property.isActive ? "✓ Property Active" : "⚠ Property Inactive"}
+                {isPropertyActive ? "✓ Property Active" : "⚠ Property Inactive"}
               </Typography>
               <Typography variant="body2" sx={{ color: (theme) => theme.palette.mode === 'dark' ? 'grey.300' : 'text.secondary' }}>
-                {property.isActive ? "Your property is visible to guests and can receive bookings." : "Configure rooms and beds to activate your property."}
+                {isPropertyActive ? "Your property is visible to guests and can receive bookings." : "Configure rooms and beds to activate your property."}
               </Typography>
             </Box>
             <Button
               variant="contained"
-              color={property.isActive ? "error" : "success"}
+              color={isPropertyActive ? "error" : "success"}
               onClick={handleToggleActive}
               disabled={loading || property.rooms.length === 0}
               sx={{ minWidth: { xs: "100%", sm: "auto" } }}
             >
-              {loading ? <CircularProgress size={24} /> : (property.isActive ? "Deactivate" : "Activate")}
+              {loading ? <CircularProgress size={24} /> : (isPropertyActive ? "Deactivate" : "Activate")}
             </Button>
           </Box>
         </Card>
@@ -644,7 +647,7 @@ export default function PropertyDetailPage() {
                 )}
                 <Divider sx={{ mb: 2 }} />
 
-                {property.isActive && !isOwner && currentUser?.id && hostHasPaid ? (
+                {isPropertyActive && !isOwner && currentUser?.id && hostHasPaid ? (
                   <Box>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                       Dates
@@ -741,7 +744,7 @@ export default function PropertyDetailPage() {
                           {bookingLoading ? (
                             <CircularProgress size={24} sx={{ color: 'white' }} />
                           ) : bookingSelection.valid ? (
-                            `Book Now - $${bookingSelection.totalPrice}`
+                            'Confirm Reservation'
                           ) : (
                             'Complete Selection to Book'
                           )}
@@ -917,7 +920,7 @@ export default function PropertyDetailPage() {
 
       </Grid>
 
-      {!property.isActive && !isOwner && (
+      {!isPropertyActive && !isOwner && (
         <Alert severity="warning" sx={{ mt: 3 }}>
           <Typography variant="body2">This property is inactive and cannot be booked.</Typography>
         </Alert>

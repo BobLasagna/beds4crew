@@ -1,42 +1,28 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
-  Avatar,
   Box,
   Typography,
   TextField,
   MenuItem,
   Slider,
   Card,
-  CardContent,
-  CardMedia,
-  CardActions,
   Button,
   Pagination,
   CircularProgress,
-  IconButton,
-  FormControlLabel,
-  Checkbox,
-  InputAdornment,
   Chip,
   Divider,
-  Tooltip,
-  Switch,
   ToggleButton,
   ToggleButtonGroup,
   Autocomplete,
-  Collapse,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import ClearIcon from '@mui/icons-material/Clear';
 
 import { commonStyles } from "../utils/styleConstants";
 import MapView from '../components/HotelMapView';
+import PropertyCard from '../components/PropertyCard';
 import { useSnackbar } from '../components/AppSnackbar';
-import { fetchWithAuth, formatPriceDisplay, API_URL } from '../utils/api';
-import { formatImageUrl } from '../utils/helpers';
+import { fetchWithAuth, API_URL } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 //TODO: Move to config file or generate based off existing data
@@ -258,90 +244,19 @@ export default function BrowsePage() {
   };
 
   const renderResultCard = (prop) => (
-    <Card 
-      key={prop._id} 
-      sx={{ display: 'flex', flexDirection: 'column', height: '100%', cursor: 'pointer' }}
-      onClick={() => handleResultFocus(prop)}
-    >
-      <CardMedia
-        component="img"
-        height="180"
-        image={formatImageUrl(prop.images?.[0]?.path || prop.images?.[0]) || 'https://picsum.photos/300/180?random=1'}
-        alt={prop.title}
-      />
-            <CardContent sx={{ flexGrow: 1, display: "flex", flexDirection: "column", gap: 1.2 }}>
-      <Box display="flex" flexWrap="wrap" alignItems="center" gap={2}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Avatar
-                    sx={{ width: 32, height: 32, fontSize: 14 }}
-                    src={prop.ownerHost?.profileImagePath || ""}
-                    alt={prop.ownerHost?.firstName || "Host"}
-                  >
-                    {prop.ownerHost?.firstName?.[0] || "H"}
-                  </Avatar>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {prop.ownerHost?.firstName ? `${prop.ownerHost.firstName} ${prop.ownerHost.lastName || ""}` : "Verified Host"}
-                  </Typography>
-
-                </Box>
-                <Typography variant="body2" color="text.secondary">{prop.city}, {prop.country}</Typography>
-              </Box>
-      </CardContent>
-      
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography variant="h6" noWrap title={prop.title}>
-          {prop.title}
-        </Typography>
-        <Typography variant="body2" color="textSecondary" noWrap>
-          {prop.address}
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
-          {prop.lowestPrice ? `$${prop.lowestPrice}/night` : formatPriceDisplay(prop)}
-        </Typography>
-        {prop.availableBeds !== undefined && (
-          <Typography variant="body2" color="primary.main" sx={{ mt: 0.5, fontWeight: 600 }}>
-            {prop.availableBeds} {prop.availableBeds === 1 ? 'bed' : 'beds'} available
-          </Typography>
-        )}
-        <Typography variant="caption" color="textSecondary">
-          {prop.category} • {prop.type}
-        </Typography>
-        {!prop.latitude || !prop.longitude ? (
-          <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
-            Map pin unavailable
-          </Typography>
-        ) : null}
-      </CardContent>
-      <CardActions sx={{ pt: 0 }}>
-        <Button
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            saveSearchState();
-            navigate(`/property/${prop._id}`);
-          }}
-        >
-          View Details
-        </Button>
-        <Tooltip title={wishlist.includes(prop._id) ? 'Remove from wishlist' : 'Add to wishlist'}>
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleToggleWishlist(prop._id);
-            }}
-            color={wishlist.includes(prop._id) ? 'error' : 'default'}
-            aria-label={wishlist.includes(prop._id) ? 'Remove from wishlist' : 'Add to wishlist'}
-          >
-            {wishlist.includes(prop._id) ? (
-              <FavoriteIcon fontSize="small" />
-            ) : (
-              <FavoriteBorderIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Tooltip>
-      </CardActions>
-    </Card>
+    <PropertyCard
+      key={prop._id}
+      property={prop}
+      layout="browseSearch"
+      onCardClick={() => handleResultFocus(prop)}
+      onViewDetails={() => {
+        saveSearchState();
+        navigate(`/property/${prop._id}`);
+      }}
+      onWishlistToggle={handleToggleWishlist}
+      isWishlisted={wishlist.includes(prop._id)}
+      showWishlist
+    />
   );
 
   const handleLocationChange = (e) => {
@@ -485,7 +400,7 @@ export default function BrowsePage() {
     fetch(`${API_URL}/properties`)
       .then(res => res.json())
       .then(data => {
-        const activeProps = data.filter(p => p.isActive !== false);
+        const activeProps = data.filter(p => p.status === "active");
         setAllProperties(activeProps);
       })
       .finally(() => setLoading(false));
@@ -526,17 +441,13 @@ export default function BrowsePage() {
   )?.label || '';
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', gap: 2, mb: 2 }}>
-        <Box>
-          <Typography variant="h4" sx={commonStyles.pageTitle}>
-            Search Beds By Date
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Search by location, adjust radius, and refine results.
-          </Typography>
-        </Box>
-      </Box>
+    <Box sx={{ ...commonStyles.contentContainer}}>  
+      <Typography variant="h4" sx={commonStyles.pageTitle}>
+        Search Beds By Date
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        Search by location, adjust radius, and refine results.
+      </Typography>
       {/* <FormControlLabel
         control={<Switch checked={showMap} onChange={(e) => setShowMap(e.target.checked)} />}
         label={showMap ? 'Map' : 'Map off'}
@@ -599,8 +510,8 @@ export default function BrowsePage() {
                 <TextField
                   {...params}
                   label="Search Location"
-                  placeholder="City or ZIP code"
-                  helperText="Type to search cities or ZIP codes"
+                  placeholder="City name"
+                  helperText="Type to search cities"
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (

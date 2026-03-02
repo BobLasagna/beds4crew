@@ -5,7 +5,6 @@ import {
   Button,
   Grid,
   Card,
-  CardContent,
   Skeleton,
   Stack,
   Chip,
@@ -45,7 +44,7 @@ export default function DashboardPage() {
     setLoading(true);
     fetch(`${API_URL}/properties`)
       .then((res) => res.json())
-      .then((data) => setProperties(data.filter((prop) => prop.isActive !== false)))
+      .then((data) => setProperties(data.filter((prop) => prop.status === "active")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -54,7 +53,7 @@ export default function DashboardPage() {
   const recommended = useMemo(() => properties.slice(8, 16), [properties]);
 
   const handleSignUpForHosting = () => {
-    snackbar("Please check account settings", "success");
+    // snackbar("Please check account settings", "success");
     setTimeout(() => {
       navigate("/pricing");
     }, 1500);
