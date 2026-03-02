@@ -20,7 +20,6 @@ const AddPropertyPage = lazy(() => import("./pages/AddPropertyPage"));
 const PropertyFeedPage = lazy(() => import("./pages/PropertyFeedPage"));
 const PropertyDetailPage = lazy(() => import("./pages/PropertyDetailPage"));
 const TripListPage = lazy(() => import("./pages/TripListPage"));
-const HostListingsPage = lazy(() => import("./pages/HostListingsPage"));
 const ReservationListPage = lazy(() => import("./pages/ReservationListPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const WishListPage = lazy(() => import("./pages/WishListPage"));
@@ -108,7 +107,7 @@ function App() {
                 <Route path="/browse" element={<BrowsePage />} />
                 <Route path="/property/:id" element={<PropertyDetailPage />} />
                 <Route path="/trips" element={<ProtectedRoute requiredRole="guest"> <TripListPage /> </ProtectedRoute>} />
-                <Route path="/my-listings" element={<ProtectedRoute requiredRole="host"> <HostListingsPage /> </ProtectedRoute>} />
+                <Route path="/my-listings" element={<ProtectedRoute requiredRole="host"> <Navigate to="/profile?tab=listings#listings-tab" replace /> </ProtectedRoute>} />
                 <Route path="/reservations" element={<ProtectedRoute requiredRole="host"> <ReservationListPage /> </ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute> <ProfilePage /> </ProtectedRoute>} />
                 <Route path="/wishlist" element={<ProtectedRoute> <WishListPage /> </ProtectedRoute>} />
