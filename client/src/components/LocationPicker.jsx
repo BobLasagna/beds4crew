@@ -44,6 +44,7 @@ export default function LocationPicker({ value, onChange }) {
 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mapActive, setMapActive] = useState(false);
 
   async function handleAddressSearch() {
     if (!query.trim()) return;
@@ -92,13 +93,14 @@ export default function LocationPicker({ value, onChange }) {
                 },
             }}
         />
-        <button
-                type="button"
-                onClick={handleAddressSearch}
-                disabled={loading}
-            >
-                {loading ? 'Searching…' : 'Search'}
-            </button>
+        <Button
+          type="button"
+          variant="outlined"
+          onClick={handleAddressSearch}
+          disabled={loading}
+        >
+          {loading ? 'Searching…' : 'Search'}
+        </Button>
     </div>
 
       {/* Current coords display */}
@@ -108,12 +110,68 @@ export default function LocationPicker({ value, onChange }) {
     </div>
 
     {/* Map with marker + circle */}
-    <MapContainer
+    <div style={{ position: 'relative', width: '100%', height: '350px' }}>
+      {!mapActive && (
+        <div
+          onClick={() => setMapActive(true)}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1000,
+            background: 'rgba(0, 0, 0, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              padding: '16px 20px',
+              borderRadius: 10,
+              textAlign: 'center',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Tap to set location</div>
+            <div style={{ fontSize: '0.85rem', color: '#666' }}>Click to unlock map interaction</div>
+          </div>
+        </div>
+      )}
+
+      {mapActive && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            zIndex: 1000,
+          }}
+        >
+          <Button
+            type="button"
+            variant="contained"
+            size="small"
+            onClick={() => setMapActive(false)}
+            sx={{ bgcolor: 'white', color: 'text.primary', '&:hover': { bgcolor: 'grey.100' } }}
+          >
+            🔒 Lock Map
+          </Button>
+        </div>
+      )}
+
+      <MapContainer
         center={center}
         zoom={13}
-        scrollWheelZoom={true}
+        scrollWheelZoom={mapActive}
+        dragging={mapActive}
         style={{ width: '100%', height: '350px' }}
-    >
+      >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
@@ -127,11 +185,12 @@ export default function LocationPicker({ value, onChange }) {
             weight: 1,
             fillColor: '#cc7755',
             fillOpacity: 0.35,
-        }}
+          }}
         />
         <PanToLocation center={center} />
-        <ClickSelector onSelect={onChange} />
+        {mapActive && <ClickSelector onSelect={onChange} />}
       </MapContainer>
+    </div>
     </div>
   );
 }
