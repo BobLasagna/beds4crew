@@ -101,8 +101,11 @@ The CLI will show webhook events in real-time.
 Add to `server/.env`:
 ```env
 STRIPE_SECRET_KEY=sk_test_your_key_here
-STRIPE_PRICE_ID=price_your_price_id_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+STRIPE_PRICE_TIER1=price_your_tier1_price_id_here
+STRIPE_PRICE_TIER2=price_your_tier2_price_id_here
+STRIPE_PRICE_TIER3=price_your_tier3_price_id_here
+STRIPE_PRICE_TIER4=price_your_tier4_price_id_here
 ```
 
 ## Checking Webhook Logs
@@ -136,7 +139,7 @@ If you see errors, they'll be logged with ❌.
 1. **Start server with logs visible**
 2. **Create test subscription:**
    - Log in to your app
-   - Click "Start subscription"
+   - Click "Choose a plan"
    - Use test card: `4242 4242 4242 4242`
    - Any future expiry date, any CVC
 3. **Watch server logs for:**

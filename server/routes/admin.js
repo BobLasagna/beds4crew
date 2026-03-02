@@ -102,10 +102,16 @@ router.get("/properties", verifyToken, verifyAdmin, async (req, res) => {
 // Update property (admin)
 router.put("/properties/:propertyId", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const { title, description, pricePerNight, maxGuests, category, isActive } = req.body;
+    const { title, description, pricePerNight, maxGuests, category, status } = req.body;
+    const updateData = { title, description, pricePerNight, maxGuests, category };
+
+    if (status !== undefined) {
+      updateData.status = status;
+    }
+
     const property = await Property.findByIdAndUpdate(
       req.params.propertyId,
-      { title, description, pricePerNight, maxGuests, category, isActive },
+      updateData,
       { new: true }
     ).populate("ownerHost", "firstName lastName email");
 

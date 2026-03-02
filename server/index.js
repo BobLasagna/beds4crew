@@ -76,7 +76,14 @@ app.get("/api/health", (req, res) => {
     environment: process.env.NODE_ENV || "development",
     checks: {
       database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
-      stripe: !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID && process.env.STRIPE_WEBHOOK_SECRET)
+      stripe: !!(
+        process.env.STRIPE_SECRET_KEY &&
+        process.env.STRIPE_WEBHOOK_SECRET &&
+        process.env.STRIPE_PRICE_TIER1 &&
+        process.env.STRIPE_PRICE_TIER2 &&
+        process.env.STRIPE_PRICE_TIER3 &&
+        process.env.STRIPE_PRICE_TIER4
+      )
     }
   };
   
@@ -172,8 +179,11 @@ app.listen(PORT, '0.0.0.0', () => {
   
   const stripeVars = {
     'STRIPE_SECRET_KEY': process.env.STRIPE_SECRET_KEY,
-    'STRIPE_PRICE_ID': process.env.STRIPE_PRICE_ID,
-    'STRIPE_WEBHOOK_SECRET': process.env.STRIPE_WEBHOOK_SECRET
+    'STRIPE_WEBHOOK_SECRET': process.env.STRIPE_WEBHOOK_SECRET,
+    'STRIPE_PRICE_TIER1': process.env.STRIPE_PRICE_TIER1,
+    'STRIPE_PRICE_TIER2': process.env.STRIPE_PRICE_TIER2,
+    'STRIPE_PRICE_TIER3': process.env.STRIPE_PRICE_TIER3,
+    'STRIPE_PRICE_TIER4': process.env.STRIPE_PRICE_TIER4
   };
   
   // Check critical variables

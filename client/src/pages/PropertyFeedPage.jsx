@@ -85,7 +85,7 @@ export default function PropertyFeedPage() {
     fetch(`${API_URL}/properties`)
       .then(res => res.json())
       .then(data => {
-        const activeProperties = data.filter(prop => prop.isActive !== false);
+        const activeProperties = data.filter(prop => prop.status === "active");
         setProperties(activeProperties);
       })
       .finally(() => setLoading(false));
@@ -123,7 +123,7 @@ export default function PropertyFeedPage() {
       const matchType = !type || prop.type === type;
       const matchPrice = (prop.pricePerNight || 0) >= priceRange[0] && (prop.pricePerNight || 0) <= priceRange[1];
       const matchRating = minRating <= 0 ? true : (typeof prop._metrics.rating === "number" && prop._metrics.rating >= minRating);
-      const matchInstant = !instantBook || prop.isActive;
+      const matchInstant = !instantBook || prop.status === "active";
       return matchTerm && matchCategory && matchType && matchPrice && matchRating && matchInstant;
     });
 
@@ -333,6 +333,7 @@ export default function PropertyFeedPage() {
                     onWishlistToggle={handleToggleWishlist}
                     isWishlisted={wishlist.includes(prop._id)}
                     showWishlist={!!user?.id}
+                    layout="browseSearch"
                   />
                 </Box>
               ))}

@@ -163,64 +163,6 @@ router.post("/checkout-tier", verifyToken, async (req, res) => {
   }
 });
 
-// LEGACY: Keep for backward compatibility
-router.post("/create-checkout-session", verifyToken, async (req, res) => {
-  try {
-    if (!process.env.STRIPE_PRICE_ID) {
-      return res.status(500).json({ message: "STRIPE_PRICE_ID is not configured" });
-    }
-
-    const stripe = getStripe();
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // Check if user already has an active subscription
-    if (user.stripeSubscriptionId && ["active", "trialing"].includes(user.subscriptionStatus)) {
-      return res.status(400).json({ 
-        message: "You already have an active subscription",
-        hasActiveSubscription: true 
-      });
-    }
-
-    let customerId = user.stripeCustomerId;
-
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: `${user.firstName} ${user.lastName}`.trim(),
-        metadata: { userId: user._id.toString() },
-      });
-      customerId = customer.id;
-      user.stripeCustomerId = customerId;
-      await user.save();
-    }
-
-    const baseUrl = getBaseUrl(req);
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-      success_url: `${baseUrl}/profile?checkout=success`,
-      cancel_url: `${baseUrl}/profile?checkout=cancel`,
-      allow_promotion_codes: true,
-      client_reference_id: user._id.toString(),
-      subscription_data: {
-        metadata: { userId: user._id.toString() },
-      },
-    });
-
-    return res.json({ url: session.url });
-  } catch (error) {
-    console.error("Stripe checkout error:", error.message);
-    return res.status(500).json({ 
-      message: process.env.NODE_ENV === 'production' 
-        ? "Failed to create checkout session" 
-        : `Failed to create checkout session: ${error.message}`
-    });
-  }
-});
-
 router.post("/create-portal-session", verifyToken, async (req, res) => {
   try {
     const stripe = getStripe();

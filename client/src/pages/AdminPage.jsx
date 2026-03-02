@@ -222,8 +222,7 @@ export default function AdminPage() {
       pricePerNight: listing.pricePerNight || 0,
       maxGuests: listing.maxGuests || 0,
       category: listing.category || '',
-      status: listing.status || '',
-      isActive: listing.isActive || false,
+      status: listing.status || 'inactive',
     });
     setEditListingOpen(true);
   };
@@ -488,7 +487,6 @@ export default function AdminPage() {
                       <TableCell><strong>Price/Night</strong></TableCell>
                       <TableCell><strong>Category</strong></TableCell>
                       <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Active</strong></TableCell>
                       <TableCell><strong>Actions</strong></TableCell>
                     </TableRow>
                   </TableHead>
@@ -503,13 +501,6 @@ export default function AdminPage() {
                           <Chip 
                             label={listing.status} 
                             color={listing.status == 'active' ? 'success' : 'default'} 
-                            size="small" 
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={listing.isActive ? 'Y' : 'N'} 
-                            color={((listing.isActive ? 'active' : 'inactive')) === 'active' ? 'success' : 'error'} 
                             size="small" 
                           />
                         </TableCell>
@@ -782,20 +773,15 @@ export default function AdminPage() {
             fullWidth
           />
           <TextField
+            select
             label="Status"
-            value={listingFormData.status || ''}
+            value={listingFormData.status || 'inactive'}
             onChange={(e) => setListingFormData({ ...listingFormData, status: e.target.value })}
             fullWidth
-          />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={listingFormData.isActive || false}
-                onChange={(e) => setListingFormData({ ...listingFormData, isActive: e.target.checked })}
-              />
-            }
-            label="is active"
-          />
+          >
+            <MenuItem value="active">Active</MenuItem>
+            <MenuItem value="inactive">Inactive</MenuItem>
+          </TextField>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditListingOpen(false)}>Cancel</Button>
