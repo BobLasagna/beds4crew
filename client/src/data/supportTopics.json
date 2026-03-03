@@ -46,7 +46,7 @@
       {
         "title": "Password Help",
         "slug": "password-reset",
-        "description": "Reset or change your password.",
+        "description": "Click below to read how to reset or change your password.",
         "resourceLink": { "label": "Read password FAQ", "href": "/support#faq-password-reset" }
       },
       {
@@ -114,10 +114,10 @@
         "resourceLink": { "label": "Privacy policy", "href": "/privacy" }
       },
       {
-        "title": "Terms",
+        "title": "Terms & Conditions",
         "slug": "terms",
-        "description": "Platform terms of service and user responsibilities.",
-        "resourceLink": { "label": "Terms of service", "href": "/terms" }
+        "description": "Platform terms, conditions, and user responsibilities.",
+        "resourceLink": { "label": "Terms & conditions", "href": "/terms" }
       },
       {
         "title": "Cookie Policy",

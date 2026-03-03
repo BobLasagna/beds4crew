@@ -5,6 +5,7 @@ import {
   Grid,
   Drawer,
   Button,
+  Pagination,
   Chip,
   Stack,
   TextField,
@@ -26,7 +27,8 @@ import { NoPropertiesFound } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
-import { getListingMetrics } from "../utils/helpers";
+
+const RESULTS_PER_PAGE = 12;
 
 export default function PropertyFeedPage() {
   const [properties, setProperties] = useState([]);
@@ -42,12 +44,15 @@ export default function PropertyFeedPage() {
   const [minRating, setMinRating] = useState(0);
   const [instantBook, setInstantBook] = useState(false);
   const [sortBy, setSortBy] = useState("best");
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [priceInitialized, setPriceInitialized] = useState(false);
   const [gridColumns, setGridColumns] = useState(3);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const location = useLocation();
   const snackbar = useSnackbar();
-  const gridOptions = [10, 5, 3, 2, 1];
+  const gridOptions = [5, 3, 2, 1];
   
   // Fetch user's wishlist on mount and when navigating to this page
   useEffect(() => {
@@ -79,17 +84,92 @@ export default function PropertyFeedPage() {
     }
   };
 
-  // Fetch all properties on mount and when navigating to this page
-  useEffect(() => {
+  const fetchProperties = async (page = 1) => {
     setLoading(true);
-    fetch(`${API_URL}/properties`)
-      .then(res => res.json())
-      .then(data => {
-        const activeProperties = data.filter(prop => prop.status === "active");
-        setProperties(activeProperties);
-      })
-      .finally(() => setLoading(false));
-  }, [location.pathname]);
+    try {
+      const sortMap = {
+        best: "recommended",
+        rating: "rating",
+        priceLow: "price-low",
+        priceHigh: "price-high",
+      };
+
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(RESULTS_PER_PAGE),
+        sort: sortMap[sortBy] || "recommended",
+        query,
+        category,
+        type,
+        minPrice: String(priceRange[0]),
+        maxPrice: String(priceRange[1]),
+        minRating: String(minRating),
+        instantBook: instantBook ? "true" : "false",
+      });
+
+      const res = await fetch(`${API_URL}/properties?${params.toString()}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load properties");
+      }
+
+      const items = Array.isArray(data.items)
+        ? data.items
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      const pagination = data?.pagination || {
+        page,
+        total: items.length,
+        totalPages: 1,
+      };
+
+      setProperties(items);
+      setCurrentPage(pagination.page || page);
+      setTotalResults(pagination.total ?? items.length);
+      setTotalPages(pagination.totalPages || 1);
+
+      const nextMaxPrice = data?.filters?.maxPrice;
+      if (typeof nextMaxPrice === "number" && nextMaxPrice > 0) {
+        setMaxPrice(nextMaxPrice);
+        if (!priceInitialized) {
+          setPriceRange([0, nextMaxPrice]);
+          setPriceInitialized(true);
+        } else if (priceRange[1] > nextMaxPrice) {
+          setPriceRange([priceRange[0], nextMaxPrice]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch properties:", err);
+      snackbar(err.message || "Failed to load listings", "error");
+      setProperties([]);
+      setTotalResults(0);
+      setTotalPages(1);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch paginated properties
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchProperties(currentPage);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    location.pathname,
+    currentPage,
+    query,
+    category,
+    type,
+    priceRange,
+    minRating,
+    instantBook,
+    sortBy,
+  ]);
 
   useEffect(() => {
     const initialQuery = searchParams.get("query") || "";
@@ -99,51 +179,10 @@ export default function PropertyFeedPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (properties.length) {
-      const prices = properties.map((p) => p.pricePerNight || 0);
-      const upper = Math.max(...prices, 1000);
-      setMaxPrice(upper);
-      setPriceRange([0, upper]);
-    }
-  }, [properties]);
-
-  const enrichedProperties = useMemo(
-    () => properties.map((prop) => ({ ...prop, _metrics: getListingMetrics(prop) })),
-    [properties]
-  );
-
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const base = enrichedProperties.filter((prop) => {
-      const matchTerm =
-        !term ||
-        [prop.title, prop.address, prop.category, prop.type, prop.description, prop.city, prop.country]
-          .some((field) => (field || "").toLowerCase().includes(term));
-      const matchCategory = !category || prop.category === category;
-      const matchType = !type || prop.type === type;
-      const matchPrice = (prop.pricePerNight || 0) >= priceRange[0] && (prop.pricePerNight || 0) <= priceRange[1];
-      const matchRating = minRating <= 0 ? true : (typeof prop._metrics.rating === "number" && prop._metrics.rating >= minRating);
-      const matchInstant = !instantBook || prop.status === "active";
-      return matchTerm && matchCategory && matchType && matchPrice && matchRating && matchInstant;
-    });
-
-    switch (sortBy) {
-      case "priceLow":
-        return [...base].sort((a, b) => (a.pricePerNight || 0) - (b.pricePerNight || 0));
-      case "priceHigh":
-        return [...base].sort((a, b) => (b.pricePerNight || 0) - (a.pricePerNight || 0));
-      case "rating":
-        return [...base].sort((a, b) => b._metrics.rating - a._metrics.rating);
-      default:
-        return base;
-    }
-  }, [enrichedProperties, query, category, type, priceRange, minRating, instantBook, sortBy]);
-
-  const visibleListings = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
-
-  useEffect(() => {
-    setVisibleCount(12);
+    setCurrentPage(1);
   }, [query, category, type, priceRange, minRating, instantBook, sortBy]);
+
+  const visibleListings = useMemo(() => properties, [properties]);
 
   const activeFilters = useMemo(() => {
     const items = [];
@@ -244,7 +283,7 @@ export default function PropertyFeedPage() {
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              {filtered.length} results
+              {totalResults} results
             </Typography>
             {activeFilters.length > 0 ? (
               activeFilters.map((filter) => (
@@ -311,7 +350,7 @@ export default function PropertyFeedPage() {
                 </Grid>
               ))}
             </Grid>
-          ) : filtered.length > 0 ? (
+          ) : visibleListings.length > 0 ? (
             <Box
               sx={(theme) => ({
                 display: "flex",
@@ -341,11 +380,13 @@ export default function PropertyFeedPage() {
           ) : (
             <NoPropertiesFound />
           )}
-          {!loading && visibleListings.length < filtered.length && (
+          {!loading && totalPages > 1 && (
             <Box display="flex" justifyContent="center" sx={{ mt: 3 }}>
-              <Button variant="outlined" onClick={() => setVisibleCount((prev) => prev + 12)}>
-                Load more
-              </Button>
+              <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={(_, page) => setCurrentPage(page)}
+              />
             </Box>
           )}
         </Box>

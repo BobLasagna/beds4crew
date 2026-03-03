@@ -155,6 +155,7 @@ export const fetchWithAuth = async (url, options = {}) => {
   if (response.ok && options.method && ['POST', 'PUT', 'DELETE'].includes(options.method)) {
     clearCache('properties');
     clearCache('bookings');
+    clearCache('tickets');
   }
 
   return response;

@@ -42,9 +42,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_URL}/properties`)
+    fetch(`${API_URL}/properties?page=1&limit=16&sort=recommended`)
       .then((res) => res.json())
-      .then((data) => setProperties(data.filter((prop) => prop.status === "active")))
+      .then((data) => {
+        const items = Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data)
+            ? data
+            : [];
+        setProperties(items);
+      })
       .finally(() => setLoading(false));
   }, []);
 
