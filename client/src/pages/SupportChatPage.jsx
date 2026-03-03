@@ -8,6 +8,105 @@ import { SUPPORT_RESOURCE_CONTENT } from "../data/supportResourceContent";
 import { hasChatFlow } from "../utils/chatFlowHelpers";
 import SupportTicketDialog from "../components/SupportTicketDialog";
 
+const TYPEWRITER_CONFIG = Object.freeze({
+  enabled: true,
+  mode: "bot-only",
+  startDelayMs: 350,
+  minCharDelayMs: 5,
+  maxCharDelayMs: 60,
+  showCaret: true
+});
+
+const shouldAnimateMessage = (role, mode) => {
+  if (mode === "all") {
+    return true;
+  }
+
+  if (mode === "none") {
+    return false;
+  }
+
+  return role === "bot";
+};
+
+function TypewriterText({ text, animate, config }) {
+  const [visibleText, setVisibleText] = useState(animate ? "" : text);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId;
+
+    if (!animate) {
+      setVisibleText(text);
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+      };
+    }
+
+    const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reducedMotion) {
+      setVisibleText(text);
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+      };
+    }
+
+    setVisibleText("");
+    let index = 0;
+
+    const typeNextCharacter = () => {
+      if (cancelled) {
+        return;
+      }
+
+      index += 1;
+      setVisibleText(text.slice(0, index));
+
+      if (index >= text.length) {
+        return;
+      }
+
+      const range = Math.max(config.maxCharDelayMs - config.minCharDelayMs, 0);
+      const randomDelay = config.minCharDelayMs + Math.round(Math.random() * range);
+      timeoutId = setTimeout(typeNextCharacter, randomDelay);
+    };
+
+    timeoutId = setTimeout(typeNextCharacter, config.startDelayMs);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [animate, config.maxCharDelayMs, config.minCharDelayMs, config.startDelayMs, text]);
+
+  const showCaret = config.showCaret && animate && visibleText.length < text.length;
+
+  return (
+    <>
+      {visibleText}
+      {showCaret && (
+        <Box
+          component="span"
+          sx={{
+            display: "inline-block",
+            width: "0.55ch",
+            ml: 0.2,
+            borderRight: "2px solid currentColor",
+            verticalAlign: "text-bottom",
+            animation: "typeCaretBlink 0.8s steps(1, end) infinite",
+            "@keyframes typeCaretBlink": {
+              "0%, 49%": { opacity: 1 },
+              "50%, 100%": { opacity: 0 }
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 const getDialogTree = (slug) => {
   return supportChatFlows[slug] || supportChatFlows.default;
 };
@@ -190,7 +289,13 @@ export default function SupportChatPage() {
                     borderColor: "divider"
                   }}
                 >
-                  <Typography variant="body2">{message.text}</Typography>
+                  <Typography variant="body2">
+                    <TypewriterText
+                      text={message.text}
+                      animate={TYPEWRITER_CONFIG.enabled && shouldAnimateMessage(message.role, TYPEWRITER_CONFIG.mode)}
+                      config={TYPEWRITER_CONFIG}
+                    />
+                  </Typography>
                 </Box>
               ))}
             </Stack>

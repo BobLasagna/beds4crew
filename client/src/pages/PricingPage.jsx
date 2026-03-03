@@ -10,7 +10,6 @@ import {
   Container,
   CircularProgress,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
 import { fetchWithAuth, API_URL } from "../utils/api";
 
 const TIERS = [
@@ -51,7 +50,6 @@ const TIERS = [
 export default function PricingPage() {
   const [selectedTier, setSelectedTier] = useState(1);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   const handleSelectTier = (tierId) => {
     setSelectedTier(tierId);
@@ -85,11 +83,11 @@ export default function PricingPage() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4, bgcolor: "background.default" }}>
       <Typography variant="h3" align="center" sx={{ mb: 2, fontWeight: "bold" }}>
         Choose Your Plan
       </Typography>
-      <Typography variant="body1" align="center" sx={{ mb: 4, color: "gray" }}>
+      <Typography variant="body1" align="center" sx={{ mb: 4, color: "text.secondary" }}>
         No commission. Keep 100% of all bookings. Cancel anytime.
       </Typography>
 
@@ -99,17 +97,18 @@ export default function PricingPage() {
             <Card
               onClick={() => handleSelectTier(tier.id)}
               sx={{
-                border: selectedTier === tier.id ? "3px solid #1976d2" : "2px solid #e0e0e0",
+                border: selectedTier === tier.id ? "3px solid" : "2px solid",
+                borderColor: selectedTier === tier.id ? "primary.main" : "divider",
                 cursor: "pointer",
                 transition: "all 0.3s ease",
                 "&:hover": {
                   boxShadow: 4,
-                  borderColor: "#1976d2",
+                  borderColor: "primary.main",
                 },
                 display: "flex",
                 flexDirection: "column",
                 height: "100%",
-                backgroundColor: selectedTier === tier.id ? "#f5f7ff" : "white",
+                backgroundColor: selectedTier === tier.id ? "action.selected" : "background.paper",
               }}
             >
               <CardContent sx={{ flex: 1 }}>
@@ -178,7 +177,15 @@ export default function PricingPage() {
         </Button>
       </Box>
 
-      <Box sx={{ mt: 4, p: 2, backgroundColor: "#f9f9f9", borderRadius: 1, textAlign: "center" }}>
+      <Box
+        sx={{
+          mt: 4,
+          p: 2,
+          backgroundColor: "action.hover",
+          borderRadius: 1,
+          textAlign: "center",
+        }}
+      >
         <Typography variant="body2" color="textSecondary">
           💳 Secure checkout powered by Stripe. No charges until you confirm.
         </Typography>
