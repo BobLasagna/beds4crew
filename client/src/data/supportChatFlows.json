@@ -1,0 +1,282 @@
+{
+  "password-reset": {
+    "startNode": "start",
+    "nodes": {
+      "start": {
+        "message": "I can help with password recovery. What are you blocked on?",
+        "options": [
+          { "label": "Reset email not received", "next": "check-inbox" },
+          { "label": "Reset link expired", "next": "expired-link" },
+          { "label": "I forgot which email I used", "next": "find-account" }
+        ]
+      },
+      "check-inbox": {
+        "message": "Check spam/promotions and confirm the email address entered. If still missing after 5 minutes, request a new reset email.",
+        "options": [
+          { "label": "I found it", "next": "resolved" },
+          { "label": "Still missing", "next": "resend-steps" }
+        ]
+      },
+      "resend-steps": {
+        "message": "Request one new reset email and only use the newest message. Older links can become invalid.",
+        "options": [
+          { "label": "The new email worked", "next": "resolved" },
+          { "label": "Still blocked", "next": "escalate" }
+        ]
+      },
+      "expired-link": {
+        "message": "For security, reset links expire quickly. Request a fresh link and open it right away.",
+        "options": [
+          { "label": "Requested a new link", "next": "resolved" },
+          { "label": "Need extra help", "next": "escalate" }
+        ]
+      },
+      "find-account": {
+        "message": "Try any work/personal email you commonly use. If none works, support can help verify identity.",
+        "options": [
+          { "label": "I recovered the account", "next": "resolved" },
+          { "label": "Continue to identity help", "next": "escalate" }
+        ]
+      },
+      "resolved": {
+        "message": "Great. You can continue in account settings once signed in. Anything else I can help with?",
+        "options": [],
+        "solutionLink": {
+          "label": "Read password help article",
+          "href": "/support#faq-password-reset"
+        }
+      },
+      "escalate": {
+        "message": "I can route this to a human support agent. Include your account email and what you already tried.",
+        "options": [],
+        "solutionLink": {
+          "label": "Submit support ticket",
+          "action": "ticket",
+          "subject": "Password help escalation"
+        }
+      }
+    }
+  },
+  "cancellation": {
+    "startNode": "start",
+    "nodes": {
+      "start": {
+        "message": "I can help with cancellations and refund timing.",
+        "options": [
+          { "label": "Cancel upcoming booking", "next": "cancel-booking" },
+          { "label": "Check refund status", "next": "refund-status" },
+          { "label": "Host cancellation issue", "next": "host-case" }
+        ]
+      },
+      "cancel-booking": {
+        "message": "Open Trips, select the booking, and choose Cancel.",
+        "options": [
+          { "label": "What refund should I expect?", "next": "policy-details" },
+          { "label": "I need the cancel steps again", "next": "cancel-steps" },
+          { "label": "I need agent help", "next": "escalate" }
+        ]
+      },
+      "policy-details": {
+        "message": "The refund amount follows the policy shown at checkout and the cancellation timing.",
+        "options": [
+          { "label": "Understood", "next": "resolved" },
+          { "label": "I want human review", "next": "escalate" }
+        ]
+      },
+      "cancel-steps": {
+        "message": "Go to Trips → reservation details → Cancel booking. Confirm before final submission.",
+        "options": [
+          { "label": "Done", "next": "resolved" },
+          { "label": "Still blocked", "next": "escalate" }
+        ]
+      },
+      "refund-status": {
+        "message": "Refunds usually appear after processing by your payment provider.",
+        "options": [
+          { "label": "Where can I track it?", "next": "refund-track" },
+          { "label": "I need support to check", "next": "escalate" }
+        ]
+      },
+      "refund-track": {
+        "message": "Check booking details in Trips for timeline updates and payment method status.",
+        "options": [
+          { "label": "Got it", "next": "resolved" },
+          { "label": "Timeline looks wrong", "next": "escalate" }
+        ]
+      },
+      "host-case": {
+        "message": "If a host cancellation impacted your trip, support can review alternatives and policy coverage.",
+        "options": [
+          { "label": "Show policy resource", "next": "resolved" },
+          { "label": "Talk to a person", "next": "escalate" }
+        ]
+      },
+      "resolved": {
+        "message": "Thanks. You now have the self-serve path for cancellation help.",
+        "options": [],
+        "solutionLink": {
+          "label": "Open cancellation policy",
+          "href": "/cancellation"
+        }
+      },
+      "escalate": {
+        "message": "Share your booking ID and what you already tried so the support team can help faster.",
+        "options": [],
+        "solutionLink": {
+          "label": "Submit support ticket",
+          "action": "ticket",
+          "subject": "Cancellation support escalation"
+        }
+      }
+    }
+  },
+  "help-center": {
+    "startNode": "start",
+    "nodes": {
+      "start": {
+        "message": "Welcome to Help Center chat. What do you need most right now?",
+        "options": [
+          { "label": "Find a support topic", "next": "browse-topics" },
+          { "label": "I need human support", "next": "escalate" },
+          { "label": "Policy or terms question", "next": "policy" }
+        ]
+      },
+      "browse-topics": {
+        "message": "Open Support to browse FAQs and guided topics by category.",
+        "options": [
+          { "label": "Open support hub", "next": "resolved-support" },
+          { "label": "Still need an agent", "next": "escalate" }
+        ]
+      },
+      "policy": {
+        "message": "You can review Terms & Conditions directly and submit a clarification request if needed.",
+        "options": [
+          { "label": "Open terms", "next": "resolved-terms" },
+          { "label": "Submit ticket", "next": "escalate" }
+        ]
+      },
+      "resolved-support": {
+        "message": "Great. Use the support hub link below to continue.",
+        "options": [],
+        "solutionLink": {
+          "label": "Open support hub",
+          "href": "/support"
+        }
+      },
+      "resolved-terms": {
+        "message": "Done. Open the full Terms & Conditions document below.",
+        "options": [],
+        "solutionLink": {
+          "label": "Open Terms & Conditions",
+          "href": "/terms"
+        }
+      },
+      "escalate": {
+        "message": "I can route this to a human support agent. Include your account email and what you already tried.",
+        "options": [],
+        "solutionLink": {
+          "label": "Submit support ticket",
+          "action": "ticket",
+          "subject": "Help Center support escalation"
+        }
+      }
+    }
+  },
+  "default": {
+    "startNode": "start",
+    "nodes": {
+      "start": {
+        "message": "Tell me what you need and I’ll route you quickly.",
+        "options": [
+          { "label": "Account and login help", "next": "account" },
+          { "label": "Booking help", "next": "booking" },
+          { "label": "Hosting and listings", "next": "hosting" },
+          { "label": "Policy and terms", "next": "policy" }
+        ]
+      },
+      "account": {
+        "message": "For account issues, we usually start with email verification and recent activity checks.",
+        "options": [
+          { "label": "Password or sign-in issue", "next": "account-password" },
+          { "label": "I need a human agent", "next": "escalate" }
+        ]
+      },
+      "account-password": {
+        "message": "Use the password reset flow first, then confirm you’re using the latest reset email.",
+        "options": [
+          { "label": "Take me to password help", "next": "resolved-account" },
+          { "label": "Still blocked", "next": "escalate" }
+        ]
+      },
+      "booking": {
+        "message": "For booking issues, save the reservation ID so support can assist faster.",
+        "options": [
+          { "label": "Cancellation and refunds", "next": "booking-cancel" },
+          { "label": "Different booking issue", "next": "escalate" }
+        ]
+      },
+      "booking-cancel": {
+        "message": "Cancellation and refund answers are in the cancellation support topic.",
+        "options": [
+          { "label": "Open cancellation resource", "next": "resolved-booking" },
+          { "label": "Need human help", "next": "escalate" }
+        ]
+      },
+      "hosting": {
+        "message": "For hosting help, we can guide setup, pricing plans, and listing quality checks.",
+        "options": [
+          { "label": "Open host community resource", "next": "resolved-hosting" },
+          { "label": "Talk to support", "next": "escalate" }
+        ]
+      },
+      "policy": {
+        "message": "For policy questions, review Terms & Conditions and request clarification when needed.",
+        "options": [
+          { "label": "Open Terms & Conditions", "next": "resolved-policy" },
+          { "label": "I need a human agent", "next": "escalate" }
+        ]
+      },
+      "resolved-account": {
+        "message": "Done. Use the linked password resource below for step-by-step help.",
+        "options": [],
+        "solutionLink": {
+          "label": "Read password help article",
+          "href": "/support#faq-password-reset"
+        }
+      },
+      "resolved-booking": {
+        "message": "Done. Continue with the cancellation resource below.",
+        "options": [],
+        "solutionLink": {
+          "label": "Open cancellation policy",
+          "href": "/cancellation"
+        }
+      },
+      "resolved-hosting": {
+        "message": "Done. Continue with host resources below.",
+        "options": [],
+        "solutionLink": {
+          "label": "Open host community resources",
+          "href": "/host-community"
+        }
+      },
+      "resolved-policy": {
+        "message": "Done. Continue with the terms document below.",
+        "options": [],
+        "solutionLink": {
+          "label": "Open Terms & Conditions",
+          "href": "/terms"
+        }
+      },
+      "escalate": {
+        "message": "I can route this to a human support agent. Include details and what you already tried.",
+        "options": [],
+        "solutionLink": {
+          "label": "Submit support ticket",
+          "action": "ticket",
+          "subject": "General support escalation"
+        }
+      }
+    }
+  }
+}

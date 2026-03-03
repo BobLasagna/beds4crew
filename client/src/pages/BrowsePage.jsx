@@ -60,13 +60,16 @@ export default function BrowsePage() {
   const [showControls, setShowControls] = useState(true);
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [gridColumns, setGridColumns] = useState(3);
-  const [startDate, setStartDate] = useState(null);
+  const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
   const [endDate, setEndDate] = useState(null);
   const [locationOptions, setLocationOptions] = useState([]);
   const [locationInput, setLocationInput] = useState('');
   const [geocoding, setGeocoding] = useState(false);
+  const [totalResults, setTotalResults] = useState(0);
+  const [activeQueryMode, setActiveQueryMode] = useState(null); // "all" | "date"
+  const [lastDateSearchParams, setLastDateSearchParams] = useState(null);
   const snackbar = useSnackbar();
-  const gridOptions = [10, 5, 3, 2, 1];
+  const gridOptions = [5, 3, 2, 1];
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const mapSectionRef = useRef(null);
@@ -184,29 +187,123 @@ export default function BrowsePage() {
     return groups;
   }, [filteredPropertiesWithCoords, calculateDistanceMeters]);
 
-  // Pagination - use all properties
-  const sortedProperties = useMemo(() => {
-    const list = [...allPropertiesForList];
-    if (sortBy === 'price-low') {
-      return list.sort((a, b) => (a.pricePerNight || 0) - (b.pricePerNight || 0));
-    }
-    if (sortBy === 'price-high') {
-      return list.sort((a, b) => (b.pricePerNight || 0) - (a.pricePerNight || 0));
-    }
-    return list;
-  }, [allPropertiesForList, sortBy]);
-
-  const totalPages = Math.ceil(sortedProperties.length / RESULTS_PER_PAGE);
-  const paginatedProperties = useMemo(() => {
-    const start = (currentPage - 1) * RESULTS_PER_PAGE;
-    return sortedProperties.slice(start, start + RESULTS_PER_PAGE);
-  }, [sortedProperties, currentPage]);
+  const totalPages = Math.ceil(totalResults / RESULTS_PER_PAGE);
+  const paginatedProperties = allPropertiesForList;
 
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(1);
     }
   }, [currentPage, totalPages]);
+
+  const fetchAllPropertiesPage = useCallback(async (page = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(RESULTS_PER_PAGE),
+        sort: sortBy,
+        lat: String(center.lat),
+        lng: String(center.lng),
+        radius: String(radius),
+      });
+
+      const res = await fetch(`${API_URL}/properties?${params.toString()}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || 'Failed to load properties');
+      }
+
+      const items = Array.isArray(data.items)
+        ? data.items
+        : Array.isArray(data)
+          ? data
+          : [];
+      const pagination = data.pagination || {
+        page,
+        total: items.length,
+        totalPages: 1,
+      };
+
+      setAllProperties(items);
+      setCurrentPage(pagination.page || page);
+      setTotalResults(pagination.total ?? items.length);
+      setActiveQueryMode('all');
+    } catch (err) {
+      console.error('Failed to load all properties:', err);
+      snackbar(err.message || 'Failed to load properties', 'error');
+      setAllProperties([]);
+      setTotalResults(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [center.lat, center.lng, radius, sortBy, snackbar]);
+
+  const fetchDateFinderPage = useCallback(async (page = 1, searchParamsOverride = null) => {
+    const effectiveParams = searchParamsOverride || lastDateSearchParams;
+    if (!effectiveParams) return { properties: [], total: 0 };
+
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        lat: effectiveParams.lat.toString(),
+        lng: effectiveParams.lng.toString(),
+        startDate: effectiveParams.startDate,
+        endDate: effectiveParams.endDate,
+        radius: effectiveParams.radius.toString(),
+        minPrice: '0',
+        maxPrice: '10000',
+        minBeds: '1',
+        page: String(page),
+        limit: String(RESULTS_PER_PAGE),
+        sort: sortBy,
+      });
+
+      const res = await fetch(`${API_URL}/properties/date-finder?${params.toString()}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || 'Search failed');
+      }
+
+      const items = Array.isArray(data.properties) ? data.properties : [];
+      const pagination = data.pagination || {
+        page,
+        total: items.length,
+        totalPages: 1,
+      };
+
+      setAllProperties(items);
+      setCurrentPage(pagination.page || page);
+      setTotalResults(pagination.total ?? items.length);
+      setActiveQueryMode('date');
+      if (searchParamsOverride) {
+        setLastDateSearchParams(searchParamsOverride);
+      }
+
+      return { properties: items, total: pagination.total ?? items.length };
+    } catch (err) {
+      console.error('Date search error:', err);
+      snackbar(err.message || 'Failed to search by dates', 'error');
+      setAllProperties([]);
+      setTotalResults(0);
+      return { properties: [], total: 0 };
+    } finally {
+      setLoading(false);
+    }
+  }, [lastDateSearchParams, sortBy, snackbar]);
+
+  useEffect(() => {
+    if (!activeQueryMode) return;
+    if (activeQueryMode === 'date' && lastDateSearchParams) {
+      fetchDateFinderPage(1, lastDateSearchParams);
+      return;
+    }
+    if (activeQueryMode === 'all') {
+      fetchAllPropertiesPage(1);
+    }
+  }, [sortBy]);
 
   const saveSearchState = () => {
     const state = {
@@ -332,56 +429,37 @@ export default function BrowsePage() {
       return;
     }
 
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        lat: center.lat.toString(),
-        lng: center.lng.toString(),
-        startDate: startDate.format('YYYY-MM-DD'),
-        endDate: endDate.format('YYYY-MM-DD'),
-        radius: radius.toString(),
-        minPrice: '0',
-        maxPrice: '10000',
-        minBeds: '1',
-      });
+    const params = {
+      lat: center.lat,
+      lng: center.lng,
+      startDate: startDate.format('YYYY-MM-DD'),
+      endDate: endDate.format('YYYY-MM-DD'),
+      radius,
+    };
 
-      const res = await fetch(`${API_URL}/properties/date-finder?${params.toString()}`);
-      const data = await res.json();
-      
-      if (res.ok) {
-        setAllProperties(data.properties || []);
-        setCurrentPage(1);
-        
-        // Select first property and scroll to results
-        if (data.properties.length > 0) {
-          setSelectedPropertyId(data.properties[0]._id);
-          setTimeout(() => {
-            const headerEl = document.querySelector('header, .MuiAppBar-root');
-            const headerOffset = headerEl?.getBoundingClientRect().height || 0;
-            const resultsEl = resultsListRef.current;
-            if (resultsEl) {
-              const resultsTop = resultsEl.getBoundingClientRect().top + window.scrollY;
-              window.scrollTo({
-                top: Math.max(resultsTop - headerOffset - 20, 0),
-                behavior: 'smooth',
-              });
-            }
-          }, 100);
+    const result = await fetchDateFinderPage(1, params);
+
+    // Select first property and scroll to results
+    if (result.properties.length > 0) {
+      setSelectedPropertyId(result.properties[0]._id);
+      setTimeout(() => {
+        const headerEl = document.querySelector('header, .MuiAppBar-root');
+        const headerOffset = headerEl?.getBoundingClientRect().height || 0;
+        const resultsEl = resultsListRef.current;
+        if (resultsEl) {
+          const resultsTop = resultsEl.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({
+            top: Math.max(resultsTop - headerOffset - 20, 0),
+            behavior: 'smooth',
+          });
         }
-        
-        if (data.properties.length === 0) {
-          snackbar('No available properties found for those dates', 'info');
-        } else {
-          snackbar(`Found ${data.properties.length} available propert${data.properties.length === 1 ? 'y' : 'ies'}`, 'success');
-        }
-      } else {
-        snackbar(data.message || 'Search failed', 'error');
-      }
-    } catch (err) {
-      console.error('Date search error:', err);
-      snackbar('Failed to search by dates', 'error');
-    } finally {
-      setLoading(false);
+      }, 100);
+    }
+
+    if (result.total === 0) {
+      snackbar('No available properties found for those dates', 'info');
+    } else {
+      snackbar(`Found ${result.total} available propert${result.total === 1 ? 'y' : 'ies'}`, 'success');
     }
   };
 
@@ -395,15 +473,8 @@ export default function BrowsePage() {
     setStartDate(null);
     setEndDate(null);
     setLocationInput('');
-    // Reload all properties
-    setLoading(true);
-    fetch(`${API_URL}/properties`)
-      .then(res => res.json())
-      .then(data => {
-        const activeProps = data.filter(p => p.status === "active");
-        setAllProperties(activeProps);
-      })
-      .finally(() => setLoading(false));
+    setLastDateSearchParams(null);
+    fetchAllPropertiesPage(1);
   };
 
   const handleToggleWishlist = async (propertyId) => {
@@ -440,6 +511,8 @@ export default function BrowsePage() {
     l => l.lat === center.lat && l.lng === center.lng
   )?.label || '';
 
+  const nights = startDate && endDate ? dayjs(endDate).startOf("day").diff(dayjs(startDate).startOf("day"), "day") : 0;
+
   return (
     <Box sx={{ ...commonStyles.contentContainer}}>  
       <Typography variant="h4" sx={commonStyles.pageTitle}>
@@ -469,17 +542,42 @@ export default function BrowsePage() {
               <DatePicker
                 label="Check-in Date"
                 value={startDate}
-                onChange={(newValue) => setStartDate(newValue)}
+                onChange={(newValue) => setStartDate(newValue ? dayjs(newValue) : null)}
+                closeOnSelect
                 minDate={dayjs()}
                 slotProps={{ textField: { fullWidth: true, size: 'small' } }}
               />
               <DatePicker
                 label="Check-out Date"
                 value={endDate}
-                onChange={(newValue) => setEndDate(newValue)}
+                onChange={(newValue) => setEndDate(newValue ? dayjs(newValue) : null)}
+                closeOnSelect
                 minDate={startDate || dayjs()}
                 slotProps={{ textField: { fullWidth: true, size: 'small' } }}
               />
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Chip
+                  label="1 Week"
+                  disabled={!startDate} clickable size="small" color="primary" variant="outlined"
+                  onClick={() => {
+                    if (startDate) setEndDate(dayjs(startDate).add(7, 'day')) }
+                  }
+                />
+                <Chip
+                  label="1 Month"
+                  disabled={!startDate} clickable size="small" color="primary" variant="outlined"
+                  onClick={() => {
+                    if (startDate) setEndDate(dayjs(startDate).add(1, 'month')); }
+                  }
+                />
+                {nights > 0 && (
+                  <Chip
+                    label={`${nights} night${nights > 1 ? "s" : ""}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
+              </Box>
             </Box>
             <Button
               variant="contained"
@@ -586,7 +684,7 @@ export default function BrowsePage() {
               <CircularProgress size={20} sx={{ mr: 1 }} />
             ) : (
               <>
-                {sortedProperties.length} results
+                {totalResults} results
                 {startDate && endDate && <Typography variant="caption" component="span" sx={{ ml: 1, color: 'primary.main' }}>(showing available properties for selected dates)</Typography>}
               </>
             )}
@@ -632,7 +730,7 @@ export default function BrowsePage() {
       <Box ref={resultsListRef}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
           <Typography variant="h6">
-            Results ({sortedProperties.length})
+            Results ({totalResults})
           </Typography>
           <Box>
             <Typography variant="body2" gutterBottom>
@@ -690,7 +788,13 @@ export default function BrowsePage() {
                 <Pagination
                   count={totalPages}
                   page={currentPage}
-                  onChange={(_, val) => setCurrentPage(val)}
+                  onChange={(_, val) => {
+                    if (activeQueryMode === 'date') {
+                      fetchDateFinderPage(val);
+                      return;
+                    }
+                    fetchAllPropertiesPage(val);
+                  }}
                 />
               </Box>
             )}

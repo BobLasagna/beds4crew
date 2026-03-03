@@ -62,6 +62,9 @@ app.use('/api/geocoding', geocodingRouter);
 const emailPreferencesRoutes = require("./routes/emailPreferences");
 app.use("/api/email-preferences", emailPreferencesRoutes);
 
+const ticketRoutes = require("./routes/tickets");
+app.use("/api/tickets", ticketRoutes);
+
 app.use("/api/billing", billingRoutes.router);
 
 const adminRoutes = require("./routes/admin");

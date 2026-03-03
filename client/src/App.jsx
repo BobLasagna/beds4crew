@@ -9,6 +9,7 @@ import NavigationDrawer from "./components/NavigationDrawer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import { fetchWithAuth, API_URL } from "./utils/api";
+import { SUPPORT_INTERNAL_PATHS } from "./data/supportTopics";
 
 // Lazy load pages for code splitting
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
@@ -26,6 +27,8 @@ const WishListPage = lazy(() => import("./pages/WishListPage"));
 const BrowsePage = lazy(() => import('./pages/BrowsePage'));
 const PricingPage = lazy(() => import('./pages/PricingPage'));
 const SupportPage = lazy(() => import('./pages/SupportPage'));
+const SupportResourcePage = lazy(() => import('./pages/SupportResourcePage'));
+const SupportChatPage = lazy(() => import('./pages/SupportChatPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 // Loading component
@@ -112,6 +115,10 @@ function App() {
                 <Route path="/profile" element={<ProtectedRoute> <ProfilePage /> </ProtectedRoute>} />
                 <Route path="/wishlist" element={<ProtectedRoute> <WishListPage /> </ProtectedRoute>} />
                 <Route path="/support" element={<SupportPage />} />
+                <Route path="/support/chat" element={<SupportChatPage />} />
+                {SUPPORT_INTERNAL_PATHS.map((path) => (
+                  <Route key={path} path={path} element={<SupportResourcePage />} />
+                ))}
                 <Route path="/admin" element={<ProtectedRoute> <AdminPage /> </ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/login" />} />
               </Routes>

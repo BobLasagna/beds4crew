@@ -18,6 +18,7 @@
     "question": "How do I become a host?",
     "summary": "Open your profile and use Account Settings to start hosting setup.",
     "status": "active",
+    "href": "/pricing",
     "answer": "Navigate to your profile, access Account Settings, and choose a plan to activate hosting features. After payment succeeds, your account is upgraded to host with listing limits based on your selected tier.",
     "steps": [
       "Make sure you're logged in.",
@@ -30,13 +31,13 @@
     ]
   },
   {
-    "slug": "use-explore",
-    "question": "How do I use Explore effectively?",
-    "summary": "Use Explore to browse listings by location, map, and property details.",
+    "slug": "use-search",
+    "question": "How do I use Search effectively?",
+    "summary": "Use Search to browse listings by location, map, and property details.",
     "status": "active",
-    "answer": "Explore helps you discover available properties quickly. Start with location, then compare amenities, ratings, and rules.",
+    "answer": "Search helps you discover available properties quickly. Start with location, then compare amenities, ratings, and rules.",
     "steps": [
-      "Open Explore / Browse listings.",
+      "Open Search by Date.",
       "Set location and view results on map/list.",
       "Open a property card to review beds, amenities, and photos.",
       "Save favorites to shortlist options."

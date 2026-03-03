@@ -24,6 +24,7 @@ import {
   Tab,
   IconButton,
   Chip,
+  TablePagination,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -49,6 +50,8 @@ export default function AdminPage() {
   // Users state
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [usersPage, setUsersPage] = useState(0);
+  const [usersRowsPerPage, setUsersRowsPerPage] = useState(10);
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [userFormData, setUserFormData] = useState({});
@@ -56,6 +59,8 @@ export default function AdminPage() {
   // Listings state
   const [listings, setListings] = useState([]);
   const [listingsLoading, setListingsLoading] = useState(false);
+  const [listingsPage, setListingsPage] = useState(0);
+  const [listingsRowsPerPage, setListingsRowsPerPage] = useState(10);
   const [editListingOpen, setEditListingOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState(null);
   const [listingFormData, setListingFormData] = useState({});
@@ -63,10 +68,20 @@ export default function AdminPage() {
   // Bookings state
   const [bookings, setBookings] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingsPage, setBookingsPage] = useState(0);
+  const [bookingsRowsPerPage, setBookingsRowsPerPage] = useState(10);
   const [editBookingOpen, setEditBookingOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [bookingStatus, setBookingStatus] = useState('');
   const [migrationLoading, setMigrationLoading] = useState(false);
+
+  // Support tickets state
+  const [tickets, setTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketsPage, setTicketsPage] = useState(0);
+  const [ticketsRowsPerPage, setTicketsRowsPerPage] = useState(10);
+  const [ticketsTotal, setTicketsTotal] = useState(0);
+  const [selectedTicketIds, setSelectedTicketIds] = useState([]);
 
   // Check authorization and fetch data
   useEffect(() => {
@@ -80,6 +95,7 @@ export default function AdminPage() {
           fetchUsers();
           fetchListings();
           fetchBookings();
+          fetchTickets(1, ticketsRowsPerPage);
         } else {
           setAuthorized(false);
           snackbar('Unauthorized: Admin access denied', 'error');
@@ -96,6 +112,33 @@ export default function AdminPage() {
 
     checkAuth();
   }, [navigate, snackbar]);
+
+  useEffect(() => {
+    setUsersPage(0);
+  }, [users.length]);
+
+  useEffect(() => {
+    setListingsPage(0);
+  }, [listings.length]);
+
+  useEffect(() => {
+    setBookingsPage(0);
+  }, [bookings.length]);
+
+  const paginatedUsers = users.slice(
+    usersPage * usersRowsPerPage,
+    usersPage * usersRowsPerPage + usersRowsPerPage
+  );
+
+  const paginatedListings = listings.slice(
+    listingsPage * listingsRowsPerPage,
+    listingsPage * listingsRowsPerPage + listingsRowsPerPage
+  );
+
+  const paginatedBookings = bookings.slice(
+    bookingsPage * bookingsRowsPerPage,
+    bookingsPage * bookingsRowsPerPage + bookingsRowsPerPage
+  );
 
   const fetchUsers = async () => {
     setUsersLoading(true);
@@ -139,6 +182,69 @@ export default function AdminPage() {
       snackbar('Failed to load bookings', 'error');
     } finally {
       setBookingsLoading(false);
+    }
+  };
+
+  const fetchTickets = async (page = ticketsPage + 1, limit = ticketsRowsPerPage) => {
+    setTicketsLoading(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/auth/admin/tickets?page=${page}&limit=${limit}`);
+      if (!res.ok) throw new Error('Failed to fetch tickets');
+      const data = await res.json();
+      setTickets(Array.isArray(data.items) ? data.items : []);
+      setTicketsTotal(data?.pagination?.total || 0);
+      setTicketsPage(Math.max((data?.pagination?.page || page) - 1, 0));
+      setTicketsRowsPerPage(data?.pagination?.limit || limit);
+      setSelectedTicketIds([]);
+    } catch (err) {
+      console.error('Error fetching tickets:', err);
+      snackbar('Failed to load support tickets', 'error');
+    } finally {
+      setTicketsLoading(false);
+    }
+  };
+
+  const handleToggleTicket = (ticketId) => {
+    setSelectedTicketIds((prev) =>
+      prev.includes(ticketId)
+        ? prev.filter((id) => id !== ticketId)
+        : [...prev, ticketId]
+    );
+  };
+
+  const handleToggleAllTickets = () => {
+    if (tickets.length === 0) return;
+    const visibleIds = tickets.map((ticket) => ticket._id);
+    const allSelected = visibleIds.every((id) => selectedTicketIds.includes(id));
+    setSelectedTicketIds(allSelected ? [] : visibleIds);
+  };
+
+  const handleBulkDeleteTickets = async () => {
+    if (selectedTicketIds.length === 0) {
+      snackbar('Select at least one ticket to delete', 'warning');
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedTicketIds.length} selected ticket(s)?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth(`${API_URL}/auth/admin/tickets`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedTicketIds }),
+      });
+      if (!res.ok) throw new Error('Failed to delete tickets');
+      const data = await res.json();
+      snackbar(`Deleted ${data.deletedCount || selectedTicketIds.length} ticket(s)`, 'success');
+
+      const remainingOnPage = Math.max(tickets.length - selectedTicketIds.length, 0);
+      const nextPage = remainingOnPage === 0 && ticketsPage > 0 ? ticketsPage : ticketsPage + 1;
+      fetchTickets(nextPage, ticketsRowsPerPage);
+    } catch (err) {
+      console.error('Error deleting tickets:', err);
+      snackbar('Failed to delete tickets', 'error');
     }
   };
 
@@ -353,6 +459,7 @@ export default function AdminPage() {
           <Tab label="Users" />
           <Tab label="Listings" />
           <Tab label="Bookings" />
+          <Tab label="Support Tickets" />
         </Tabs>
 
         {/* Maintenance Actions */}
@@ -398,63 +505,79 @@ export default function AdminPage() {
                 <CircularProgress />
               </Box>
             ) : users.length > 0 ? (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: 'grey.100' }}>
-                      <TableCell><strong>Name</strong></TableCell>
-                      <TableCell><strong>Email</strong></TableCell>
-                      <TableCell><strong>Role</strong></TableCell>
-                      <TableCell><strong>Tier</strong></TableCell>
-                      <TableCell><strong>Subscription</strong></TableCell>
-                      <TableCell><strong>Actions</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {users.map(user => {
-                      const isAccountActive = user.isActive !== false;
-                      const subStatus = user.subscriptionStatus || '';
-                      const hasStripe = Boolean(user.stripeCustomerId);
-                      
-                      let displayLabel = isAccountActive ? 'Active' : 'Inactive';
-                      let displayColor = isAccountActive ? 'success' : 'error';
-                      
-                      return (
-                        <TableRow key={user._id}>
-                          <TableCell>{user.firstName} {user.lastName}</TableCell>
-                          <TableCell>{user.email}</TableCell>
-                          <TableCell>
-                            <Chip label={user.role} color={user.role === 'host' ? 'primary' : 'default'} size="small" />
-                          </TableCell>
-                          <TableCell>
-                            {user.stripeCurrentTier ? (
-                              <Chip 
-                                label={`Tier ${user.stripeCurrentTier} (${user.listingLimit} listings)`}
-                                color="primary"
-                                variant="outlined"
-                                size="small"
-                              />
-                            ) : (
-                              <Typography variant="caption" color="text.secondary">Free</Typography>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Chip label={displayLabel} color={displayColor} size="small" />
-                          </TableCell>
-                          <TableCell>
-                            <IconButton size="small" onClick={() => handleEditUser(user)} color="primary">
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => handleDeleteUser(user._id)} color="error">
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.100' }}>
+                        <TableCell><strong>Name</strong></TableCell>
+                        <TableCell><strong>Email</strong></TableCell>
+                        <TableCell><strong>Role</strong></TableCell>
+                        <TableCell><strong>Tier</strong></TableCell>
+                        <TableCell><strong>Subscription</strong></TableCell>
+                        <TableCell><strong>Actions</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedUsers.map(user => {
+                        const isAccountActive = user.isActive !== false;
+                        const subStatus = user.subscriptionStatus || '';
+                        const hasStripe = Boolean(user.stripeCustomerId);
+                        
+                        let displayLabel = isAccountActive ? 'Active' : 'Inactive';
+                        let displayColor = isAccountActive ? 'success' : 'error';
+                        
+                        return (
+                          <TableRow key={user._id}>
+                            <TableCell>{user.firstName} {user.lastName}</TableCell>
+                            <TableCell>{user.email}</TableCell>
+                            <TableCell>
+                              <Chip label={user.role} color={user.role === 'host' ? 'primary' : 'default'} size="small" />
+                            </TableCell>
+                            <TableCell>
+                              {user.stripeCurrentTier ? (
+                                <Chip 
+                                  label={`Tier ${user.stripeCurrentTier} (${user.listingLimit} listings)`}
+                                  color="primary"
+                                  variant="outlined"
+                                  size="small"
+                                />
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">Free</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Chip label={displayLabel} color={displayColor} size="small" />
+                            </TableCell>
+                            <TableCell>
+                              <IconButton size="small" onClick={() => handleEditUser(user)} color="primary">
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton size="small" onClick={() => handleDeleteUser(user._id)} color="error">
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <TablePagination
+                  component="div"
+                  count={users.length}
+                  page={usersPage}
+                  onPageChange={(_, nextPage) => setUsersPage(nextPage)}
+                  rowsPerPage={usersRowsPerPage}
+                  onRowsPerPageChange={(event) => {
+                    const nextRows = parseInt(event.target.value, 10);
+                    setUsersRowsPerPage(nextRows);
+                    setUsersPage(0);
+                  }}
+                  rowsPerPageOptions={[5, 10, 25, 50]}
+                />
+              </>
             ) : (
               <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                 No users found
@@ -478,45 +601,61 @@ export default function AdminPage() {
                 <CircularProgress />
               </Box>
             ) : listings.length > 0 ? (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: 'grey.100' }}>
-                      <TableCell><strong>Title</strong></TableCell>
-                      <TableCell><strong>Host</strong></TableCell>
-                      <TableCell><strong>Price/Night</strong></TableCell>
-                      <TableCell><strong>Category</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Actions</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {listings.map(listing => (
-                      <TableRow key={listing._id}>
-                        <TableCell>{listing.title}</TableCell>
-                        <TableCell>{listing.ownerHost?.firstName} {listing.ownerHost?.lastName}</TableCell>
-                        <TableCell>${listing.pricePerNight}</TableCell>
-                        <TableCell>{listing.category}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={listing.status} 
-                            color={listing.status == 'active' ? 'success' : 'default'} 
-                            size="small" 
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <IconButton size="small" onClick={() => handleEditListing(listing)} color="primary">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" onClick={() => handleDeleteListing(listing._id)} color="error">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.100' }}>
+                        <TableCell><strong>Title</strong></TableCell>
+                        <TableCell><strong>Host</strong></TableCell>
+                        <TableCell><strong>Price/Night</strong></TableCell>
+                        <TableCell><strong>Category</strong></TableCell>
+                        <TableCell><strong>Status</strong></TableCell>
+                        <TableCell><strong>Actions</strong></TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedListings.map(listing => (
+                        <TableRow key={listing._id}>
+                          <TableCell>{listing.title}</TableCell>
+                          <TableCell>{listing.ownerHost?.firstName} {listing.ownerHost?.lastName}</TableCell>
+                          <TableCell>${listing.pricePerNight}</TableCell>
+                          <TableCell>{listing.category}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={listing.status} 
+                              color={listing.status == 'active' ? 'success' : 'default'} 
+                              size="small" 
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <IconButton size="small" onClick={() => handleEditListing(listing)} color="primary">
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => handleDeleteListing(listing._id)} color="error">
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <TablePagination
+                  component="div"
+                  count={listings.length}
+                  page={listingsPage}
+                  onPageChange={(_, nextPage) => setListingsPage(nextPage)}
+                  rowsPerPage={listingsRowsPerPage}
+                  onRowsPerPageChange={(event) => {
+                    const nextRows = parseInt(event.target.value, 10);
+                    setListingsRowsPerPage(nextRows);
+                    setListingsPage(0);
+                  }}
+                  rowsPerPageOptions={[5, 10, 25, 50]}
+                />
+              </>
             ) : (
               <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                 No listings found
@@ -540,63 +679,181 @@ export default function AdminPage() {
                 <CircularProgress />
               </Box>
             ) : bookings.length > 0 ? (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: 'grey.100' }}>
-                      <TableCell><strong>Property</strong></TableCell>
-                      <TableCell><strong>Guest</strong></TableCell>
-                      <TableCell><strong>Host</strong></TableCell>
-                      <TableCell><strong>Dates</strong></TableCell>
-                      <TableCell><strong>Total</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Actions</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {bookings.map(booking => (
-                      <TableRow key={booking._id}>
-                        <TableCell>
-                          {booking.property?.title || 'Unknown'}
-                          <Typography variant="caption" display="block" color="text.secondary">
-                            {booking.property?.city}, {booking.property?.country}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{booking.guest?.firstName} {booking.guest?.lastName}</TableCell>
-                        <TableCell>{booking.host?.firstName} {booking.host?.lastName}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {dayjs.utc(booking.startDate).format("M/D/YYYY")} – {dayjs.utc(booking.endDate).format("M/D/YYYY")}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>${booking.totalPrice}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={booking.status} 
-                            color={
-                              booking.status === 'confirmed' ? 'success' : 
-                              booking.status === 'pending' ? 'warning' : 
-                              booking.status === 'cancelled' || booking.status === 'rejected' ? 'error' : 'default'
-                            } 
-                            size="small" 
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <IconButton size="small" onClick={() => handleEditBooking(booking)} color="primary">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" onClick={() => handleDeleteBooking(booking._id)} color="error">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.100' }}>
+                        <TableCell><strong>Property</strong></TableCell>
+                        <TableCell><strong>Guest</strong></TableCell>
+                        <TableCell><strong>Host</strong></TableCell>
+                        <TableCell><strong>Dates</strong></TableCell>
+                        <TableCell><strong>Total</strong></TableCell>
+                        <TableCell><strong>Status</strong></TableCell>
+                        <TableCell><strong>Actions</strong></TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedBookings.map(booking => (
+                        <TableRow key={booking._id}>
+                          <TableCell>
+                            {booking.property?.title || 'Unknown'}
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              {booking.property?.city}, {booking.property?.country}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{booking.guest?.firstName} {booking.guest?.lastName}</TableCell>
+                          <TableCell>{booking.host?.firstName} {booking.host?.lastName}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {dayjs.utc(booking.startDate).format("M/D/YYYY")} – {dayjs.utc(booking.endDate).format("M/D/YYYY")}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>${booking.totalPrice}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={booking.status} 
+                              color={
+                                booking.status === 'confirmed' ? 'success' : 
+                                booking.status === 'pending' ? 'warning' : 
+                                booking.status === 'cancelled' || booking.status === 'rejected' ? 'error' : 'default'
+                              } 
+                              size="small" 
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <IconButton size="small" onClick={() => handleEditBooking(booking)} color="primary">
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => handleDeleteBooking(booking._id)} color="error">
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <TablePagination
+                  component="div"
+                  count={bookings.length}
+                  page={bookingsPage}
+                  onPageChange={(_, nextPage) => setBookingsPage(nextPage)}
+                  rowsPerPage={bookingsRowsPerPage}
+                  onRowsPerPageChange={(event) => {
+                    const nextRows = parseInt(event.target.value, 10);
+                    setBookingsRowsPerPage(nextRows);
+                    setBookingsPage(0);
+                  }}
+                  rowsPerPageOptions={[5, 10, 25, 50]}
+                />
+              </>
             ) : (
               <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                 No bookings found
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Support Tickets Tab */}
+        {tabValue === 3 && (
+          <Box sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="h6">Support Tickets ({ticketsTotal})</Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button variant="outlined" onClick={() => fetchTickets(ticketsPage + 1, ticketsRowsPerPage)} disabled={ticketsLoading}>
+                  {ticketsLoading ? <CircularProgress size={24} /> : 'Refresh'}
+                </Button>
+                <Button color="error" variant="outlined" onClick={handleBulkDeleteTickets} disabled={ticketsLoading || selectedTicketIds.length === 0}>
+                  Delete Selected ({selectedTicketIds.length})
+                </Button>
+              </Box>
+            </Box>
+
+            {ticketsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : tickets.length > 0 ? (
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.100' }}>
+                        <TableCell>
+                          <Checkbox
+                            checked={tickets.length > 0 && tickets.every((ticket) => selectedTicketIds.includes(ticket._id))}
+                            indeterminate={selectedTicketIds.length > 0 && !tickets.every((ticket) => selectedTicketIds.includes(ticket._id))}
+                            onChange={handleToggleAllTickets}
+                          />
+                        </TableCell>
+                        <TableCell><strong>Created</strong></TableCell>
+                        <TableCell><strong>Subject</strong></TableCell>
+                        <TableCell><strong>User</strong></TableCell>
+                        <TableCell><strong>Context</strong></TableCell>
+                        <TableCell><strong>Status</strong></TableCell>
+                        <TableCell><strong>Message</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {tickets.map((ticket) => (
+                        <TableRow key={ticket._id} hover>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedTicketIds.includes(ticket._id)}
+                              onChange={() => handleToggleTicket(ticket._id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {dayjs.utc(ticket.createdAt).format('M/D/YYYY h:mm A')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {ticket.subject}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{ticket.userName}</Typography>
+                            <Typography variant="caption" color="text.secondary">{ticket.userEmail}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{ticket.contextTitle || 'Support'}</Typography>
+                            <Typography variant="caption" color="text.secondary">{ticket.contextSlug || 'general'}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={ticket.status || 'open'} size="small" color={ticket.status === 'resolved' || ticket.status === 'closed' ? 'success' : 'warning'} />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ maxWidth: 360 }}>
+                              {ticket.message}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <TablePagination
+                  component="div"
+                  count={ticketsTotal}
+                  page={ticketsPage}
+                  onPageChange={(_, nextPage) => fetchTickets(nextPage + 1, ticketsRowsPerPage)}
+                  rowsPerPage={ticketsRowsPerPage}
+                  onRowsPerPageChange={(event) => {
+                    const nextRows = parseInt(event.target.value, 10);
+                    fetchTickets(1, nextRows);
+                  }}
+                  rowsPerPageOptions={[5, 10, 25, 50]}
+                />
+              </>
+            ) : (
+              <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                No support tickets found
               </Typography>
             )}
           </Box>

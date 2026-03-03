@@ -120,6 +120,195 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
 // Get all properties (for guests) - only show active properties with caching
 router.get("/", async (req, res) => {
   try {
+    const {
+      page: pageQuery,
+      limit: limitQuery,
+      lat,
+      lng,
+      radius,
+      query,
+      category,
+      type,
+      ownerId,
+      minPrice,
+      maxPrice,
+      minRating,
+      instantBook,
+      sort = "recommended",
+    } = req.query;
+
+    const hasPagination = pageQuery !== undefined || limitQuery !== undefined;
+    const page = Math.max(parseInt(pageQuery, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(limitQuery, 10) || 10, 1), 50);
+
+    const hasAdvancedFilters =
+      query !== undefined ||
+      category !== undefined ||
+      type !== undefined ||
+      ownerId !== undefined ||
+      minPrice !== undefined ||
+      maxPrice !== undefined ||
+      minRating !== undefined ||
+      instantBook !== undefined;
+
+    const hasGeoFilter = lat !== undefined && lng !== undefined;
+    const latitude = hasGeoFilter ? parseFloat(lat) : null;
+    const longitude = hasGeoFilter ? parseFloat(lng) : null;
+    const radiusMiles = parseFloat(radius) || 30;
+
+    const minPriceNum = minPrice !== undefined ? parseFloat(minPrice) : null;
+    const maxPriceNum = maxPrice !== undefined ? parseFloat(maxPrice) : null;
+    const minRatingNum = minRating !== undefined ? parseFloat(minRating) : null;
+
+    const normalizeSort = () => {
+      if (sort === "price-low" || sort === "priceLow") return "priceLow";
+      if (sort === "price-high" || sort === "priceHigh") return "priceHigh";
+      if (sort === "rating") return "rating";
+      return "recommended";
+    };
+
+    const normalizedSort = normalizeSort();
+
+    const applySort = (items) => {
+      if (normalizedSort === "priceLow") {
+        return items.sort((a, b) => (a.pricePerNight || 0) - (b.pricePerNight || 0));
+      }
+      if (normalizedSort === "priceHigh") {
+        return items.sort((a, b) => (b.pricePerNight || 0) - (a.pricePerNight || 0));
+      }
+      if (normalizedSort === "rating") {
+        return items.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      }
+      if (hasGeoFilter) {
+        return items.sort((a, b) => (a.distance || Number.MAX_SAFE_INTEGER) - (b.distance || Number.MAX_SAFE_INTEGER));
+      }
+      return items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    };
+
+    const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const baseQuery = { status: "active" };
+    if (category) baseQuery.category = category;
+    if (type) baseQuery.type = type;
+    if (ownerId) baseQuery.ownerHost = ownerId;
+    if (Number.isFinite(minPriceNum) || Number.isFinite(maxPriceNum)) {
+      baseQuery.pricePerNight = {};
+      if (Number.isFinite(minPriceNum)) baseQuery.pricePerNight.$gte = minPriceNum;
+      if (Number.isFinite(maxPriceNum)) baseQuery.pricePerNight.$lte = maxPriceNum;
+    }
+    if (Number.isFinite(minRatingNum) && minRatingNum > 0) {
+      baseQuery.rating = { $gte: minRatingNum };
+    }
+    if (hasGeoFilter) {
+      baseQuery.latitude = { $exists: true, $ne: null };
+      baseQuery.longitude = { $exists: true, $ne: null };
+    }
+    if (query && String(query).trim()) {
+      const term = escapeRegex(String(query).trim());
+      const regex = new RegExp(term, "i");
+      baseQuery.$or = [
+        { title: regex },
+        { address: regex },
+        { category: regex },
+        { type: regex },
+        { description: regex },
+        { city: regex },
+        { country: regex },
+      ];
+    }
+
+    if (hasGeoFilter) {
+      const baseProperties = await Property.find(baseQuery)
+        .populate("ownerHost", "firstName lastName profileImagePath hasPaid")
+        .lean();
+
+      const filtered = baseProperties.filter((prop) => {
+        const EARTH_RADIUS_MILES = 3959;
+        const latDiff = ((prop.latitude || 0) - latitude) * Math.PI / 180;
+        const lngDiff = ((prop.longitude || 0) - longitude) * Math.PI / 180;
+        const a = Math.sin(latDiff / 2) * Math.sin(latDiff / 2) +
+          Math.cos(latitude * Math.PI / 180) * Math.cos((prop.latitude || 0) * Math.PI / 180) *
+          Math.sin(lngDiff / 2) * Math.sin(lngDiff / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = EARTH_RADIUS_MILES * c;
+        prop.distance = distance;
+        return distance <= radiusMiles;
+      });
+
+      const sorted = applySort(filtered);
+      const maxPriceValue = sorted.reduce((max, item) => Math.max(max, item.pricePerNight || 0), 0);
+
+      if (!hasPagination) {
+        return res.json(sorted);
+      }
+
+      const total = sorted.length;
+      const totalPages = Math.max(Math.ceil(total / limit), 1);
+      const normalizedPage = Math.min(page, totalPages);
+      const startIndex = (normalizedPage - 1) * limit;
+      const items = sorted.slice(startIndex, startIndex + limit);
+
+      return res.json({
+        items,
+        pagination: {
+          page: normalizedPage,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: normalizedPage < totalPages,
+          hasPrevPage: normalizedPage > 1,
+        },
+        filters: {
+          maxPrice: maxPriceValue,
+        },
+      });
+    }
+
+    if (hasPagination || hasAdvancedFilters) {
+      let mongooseQuery = Property.find(baseQuery)
+        .populate("ownerHost", "firstName lastName profileImagePath hasPaid")
+        .lean();
+
+      if (normalizedSort === "priceLow") {
+        mongooseQuery = mongooseQuery.sort({ pricePerNight: 1, createdAt: -1 });
+      } else if (normalizedSort === "priceHigh") {
+        mongooseQuery = mongooseQuery.sort({ pricePerNight: -1, createdAt: -1 });
+      } else if (normalizedSort === "rating") {
+        mongooseQuery = mongooseQuery.sort({ rating: -1, createdAt: -1 });
+      } else {
+        mongooseQuery = mongooseQuery.sort({ createdAt: -1 });
+      }
+
+      const total = await Property.countDocuments(baseQuery);
+      const maxPriceDoc = await Property.findOne(baseQuery).sort({ pricePerNight: -1 }).select("pricePerNight").lean();
+      const maxPriceValue = maxPriceDoc?.pricePerNight || 0;
+
+      if (!hasPagination) {
+        const items = await mongooseQuery;
+        return res.json(items);
+      }
+
+      const totalPages = Math.max(Math.ceil(total / limit), 1);
+      const normalizedPage = Math.min(page, totalPages);
+      const startIndex = (normalizedPage - 1) * limit;
+      const items = await mongooseQuery.skip(startIndex).limit(limit);
+
+      return res.json({
+        items,
+        pagination: {
+          page: normalizedPage,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: normalizedPage < totalPages,
+          hasPrevPage: normalizedPage > 1,
+        },
+        filters: {
+          maxPrice: maxPriceValue,
+        },
+      });
+    }
+
     const cacheKey = "properties:all";
     const cached = cache.get(cacheKey);
     
@@ -160,7 +349,7 @@ router.get("/mine", verifyToken, async (req, res) => {
 // IMPORTANT: This must come BEFORE /:id route to avoid matching "date-finder" as an ID
 router.get("/date-finder", async (req, res) => {
   try {
-    const { lat, lng, startDate, endDate, radius, minPrice, maxPrice, minBeds } = req.query;
+    const { lat, lng, startDate, endDate, radius, minPrice, maxPrice, minBeds, page: pageQuery, limit: limitQuery, sort = "recommended" } = req.query;
     
     // console.log('🔍 Date Finder API called with params:', req.query);
     
@@ -175,6 +364,9 @@ router.get("/date-finder", async (req, res) => {
     const minPriceNum = parseFloat(minPrice) || 0;
     const maxPriceNum = parseFloat(maxPrice) || Number.MAX_SAFE_INTEGER;
     const minBedsNum = parseInt(minBeds) || 1;
+    const hasPagination = pageQuery !== undefined || limitQuery !== undefined;
+    const page = Math.max(parseInt(pageQuery, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(limitQuery, 10) || 10, 1), 50);
     
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -313,11 +505,37 @@ router.get("/date-finder", async (req, res) => {
     
     // console.log(`🔍 Final result: ${availableProperties.length} available properties`);
     
-    // Sort by distance
-    availableProperties.sort((a, b) => a.distance - b.distance);
-    
+    // Sort
+    if (sort === "price-low") {
+      availableProperties.sort((a, b) => (a.lowestPrice || 0) - (b.lowestPrice || 0));
+    } else if (sort === "price-high") {
+      availableProperties.sort((a, b) => (b.lowestPrice || 0) - (a.lowestPrice || 0));
+    } else {
+      availableProperties.sort((a, b) => a.distance - b.distance);
+    }
+
+    const total = availableProperties.length;
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+    const normalizedPage = Math.min(page, totalPages);
+    const startIndex = (normalizedPage - 1) * limit;
+    const pagedProperties = hasPagination
+      ? availableProperties.slice(startIndex, startIndex + limit)
+      : availableProperties;
+
     res.json({
-      properties: availableProperties,
+      properties: pagedProperties,
+      ...(hasPagination
+        ? {
+            pagination: {
+              page: normalizedPage,
+              limit,
+              total,
+              totalPages,
+              hasNextPage: normalizedPage < totalPages,
+              hasPrevPage: normalizedPage > 1,
+            },
+          }
+        : {}),
       searchParams: {
         location: { lat: latitude, lng: longitude },
         radius: radiusMiles,

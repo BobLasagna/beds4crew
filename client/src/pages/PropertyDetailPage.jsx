@@ -636,6 +636,9 @@ export default function PropertyDetailPage() {
             <Box sx={{ position: { md: "sticky" }, top: { md: 96 } }}>
               <Card sx={{ p: 3, borderRadius: 3, mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  Create Reservation
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }} color="text.secondary" >
                   {formatPriceDisplay(property)}
                 </Typography>
                 {(metrics.responseHours || metrics.completionRate) && (
@@ -661,6 +664,7 @@ export default function PropertyDetailPage() {
                             setStartDate(val ? dayjs(val) : null);
                             setStatus("");
                           }}
+                          closeOnSelect
                           minDate={dayjs()}
                           slotProps={{ textField: { fullWidth: true, size: "small" } }}
                         />
@@ -673,6 +677,7 @@ export default function PropertyDetailPage() {
                             setEndDate(val ? dayjs(val) : null);
                             setStatus("");
                           }}
+                          closeOnSelect
                           minDate={startDate ? dayjs(startDate).add(1, 'day') : dayjs().add(1, 'day')}
                           slotProps={{ textField: { fullWidth: true, size: "small" } }}
                         />

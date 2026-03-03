@@ -74,14 +74,15 @@ export default function ProfilePage() {
       return;
     }
 
-    fetch(`${API_URL}/properties`)
+    fetch(`${API_URL}/properties?page=1&limit=50&ownerId=${encodeURIComponent(storedUser.id)}`)
       .then((res) => res.json())
       .then((data) => {
-        const filtered = data.filter((prop) => {
-          const ownerId = prop.ownerHost?._id || prop.ownerHost;
-          return ownerId === storedUser.id;
-        });
-        setListings(filtered);
+        const items = Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data)
+            ? data
+            : [];
+        setListings(items);
       })
       .catch(() => {});
 

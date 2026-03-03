@@ -2,6 +2,7 @@ const express = require("express");
 const User = require("../models/User");
 const Property = require("../models/Property");
 const Booking = require("../models/Booking");
+const Ticket = require("../models/Ticket");
 const verifyToken = require("../middleware/auth");
 const router = express.Router();
 
@@ -225,6 +226,52 @@ router.post("/fix-beds", verifyToken, verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to fix beds", error: error.message });
+  }
+});
+
+// Get support tickets (paginated, newest first)
+router.get("/tickets", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const [tickets, total] = await Promise.all([
+      Ticket.find({})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Ticket.countDocuments({})
+    ]);
+
+    res.json({
+      items: tickets,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch tickets", error: error.message });
+  }
+});
+
+// Bulk delete support tickets
+router.delete("/tickets", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Ticket ids are required" });
+    }
+
+    const deleteResult = await Ticket.deleteMany({ _id: { $in: ids } });
+    res.json({ message: "Tickets deleted successfully", deletedCount: deleteResult.deletedCount || 0 });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete tickets", error: error.message });
   }
 });
 

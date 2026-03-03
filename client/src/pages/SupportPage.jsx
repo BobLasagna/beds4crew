@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Typography, Box, Button, Paper, Divider, Switch, FormControlLabel, FormGroup, Grid, Chip, Card, CardContent, Stack, Link, Collapse, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
-import PhoneIcon from "@mui/icons-material/Phone";
-import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import EmailIcon from "@mui/icons-material/Email";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link as RouterLink } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { SUPPORT_TOPIC_GROUPS, SUPPORT_TOPICS } from "../data/supportTopics";
 import supportFaqs from "../data/supportFaqs.json";
+import { hasChatFlow } from "../utils/chatFlowHelpers";
 
 export default function SupportPage() {
   const navigate = useNavigate();
@@ -17,6 +16,7 @@ export default function SupportPage() {
   const snackbar = useSnackbar();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [activeGroup, setActiveGroup] = useState(SUPPORT_TOPIC_GROUPS[0]?.title || "");
   const [expandedTopic, setExpandedTopic] = useState(null);
   const [faqSectionOpen, setFaqSectionOpen] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState(null);
@@ -44,20 +44,6 @@ export default function SupportPage() {
         .catch(err => console.error('Failed to load email preferences:', err));
     }
   }, []);
-
-  const handleCallSupport = () => {
-    snackbar("Notifying support...", "info");
-    setTimeout(() => {
-      navigate("/");
-    }, 1500);
-  };
-
-  const handleSignUpForHosting = () => {
-    snackbar("Please check account settings", "success");
-    setTimeout(() => {
-      navigate("/profile");
-    }, 1500);
-  };
 
   const handleEmailPreferenceChange = async (preference) => {
     const newValue = !emailPreferences[preference];
@@ -90,6 +76,14 @@ export default function SupportPage() {
 
   const topicGroups = SUPPORT_TOPIC_GROUPS;
   const allTopics = SUPPORT_TOPICS;
+  const activeTopics = topicGroups.find((group) => group.title === activeGroup)?.topics || [];
+  const findTopicGroupTitle = (slug) => topicGroups.find((group) => group.topics.some((topic) => topic.slug === slug))?.title;
+  const isExternalLink = (href = "") => href.startsWith("http");
+
+  const openSupportChat = ({ slug, title, source = "topic" }) => {
+    const params = new URLSearchParams({ source, slug, title });
+    navigate(`/support/chat?${params.toString()}`);
+  };
   const getScrollOffset = () => {
     const stickyElements = document.querySelectorAll("header, [role='banner'], .MuiAppBar-root");
     let offset = 16;
@@ -139,6 +133,10 @@ export default function SupportPage() {
 
     const exists = allTopics.some((topic) => topic.slug === hashSlug);
     if (exists) {
+      const groupTitle = findTopicGroupTitle(hashSlug);
+      if (groupTitle) {
+        setActiveGroup(groupTitle);
+      }
       setExpandedTopic(hashSlug);
       requestAnimationFrame(() => {
         scrollToTopic(hashSlug);
@@ -157,6 +155,10 @@ export default function SupportPage() {
   }, [location.hash, allTopics]);
 
   const handleTopicSelect = (slug) => {
+    const groupTitle = findTopicGroupTitle(slug);
+    if (groupTitle) {
+      setActiveGroup(groupTitle);
+    }
     setExpandedTopic(slug);
     navigate(`/support#${encodeURIComponent(slug)}`, { replace: true });
     requestAnimationFrame(() => {
@@ -173,15 +175,33 @@ export default function SupportPage() {
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
           Browse topics
         </Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 3 }}>
-          {allTopics.map((topic) => (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Pick a category first, then open a specific topic.
+        </Typography>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+          {topicGroups.map((group) => (
             <Chip
-              key={topic.slug}
-              label={topic.title}
-              onClick={() => handleTopicSelect(topic.slug)}
-              color={expandedTopic === topic.slug ? "primary" : "default"}
+              key={group.title}
+              label={group.title}
+              onClick={() => setActiveGroup(group.title)}
+              color={activeGroup === group.title ? "primary" : "default"}
               sx={{ mb: 1 }}
             />
+          ))}
+        </Stack>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 3 }}>
+          {activeTopics.map((topic) => (
+            <Button
+              key={topic.slug}
+              size="small"
+              variant={expandedTopic === topic.slug ? "contained" : "outlined"}
+              onClick={() => handleTopicSelect(topic.slug)}
+              sx={{ mb: 1 }}
+            >
+              {topic.title}
+            </Button>
           ))}
         </Stack>
 
@@ -198,6 +218,26 @@ export default function SupportPage() {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Quick guides for common actions.
             </Typography>
+
+            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+              {supportFaqs.map((faq) => (
+                <Chip
+                  key={`faq-chip-${faq.slug}`}
+                  label={faq.question}
+                  size="small"
+                  variant={expandedFaq === faq.slug ? "filled" : "outlined"}
+                  onClick={() => {
+                    setFaqSectionOpen(true);
+                    setExpandedFaq(faq.slug);
+                    navigate(`/support#faq-${encodeURIComponent(faq.slug)}`, { replace: true });
+                    requestAnimationFrame(() => {
+                      scrollToFaq(faq.slug);
+                    });
+                  }}
+                  sx={{ mb: 1 }}
+                />
+              ))}
+            </Stack>
 
             <Collapse in={faqSectionOpen} timeout="auto">
               <Stack spacing={1.5}>
@@ -227,21 +267,46 @@ export default function SupportPage() {
                       </Box>
                     </AccordionSummary>
                     <AccordionDetails>
-                      {faq.status === "todo" && (
-                        <Chip label="Template TODO" color="warning" size="small" sx={{ mb: 1 }} />
-                      )}
+                      <Typography variant="overline" color="text.secondary" sx={{ display: "block" }}>
+                        Answer
+                      </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: faq.steps?.length ? 1 : 2 }}>
                         {faq.answer}
                       </Typography>
                       {Array.isArray(faq.steps) && faq.steps.length > 0 && (
-                        <Box component="ol" sx={{ pl: 2.5, mb: 2, mt: 0 }}>
+                        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, mb: 2 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                            Recommended steps
+                          </Typography>
+                          <Box component="ol" sx={{ pl: 2.5, mb: 0, mt: 0 }}>
                           {faq.steps.map((step, index) => (
                             <Typography key={`${faq.slug}-${index}`} component="li" variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                               {step}
                             </Typography>
                           ))}
+                          </Box>
+                          {faq.href && (
+                            <Link
+                              href={faq.href}
+                              target={faq.href.startsWith("http") ? "_blank" : undefined}
+                              rel={faq.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                            >
+                              {faq.hrefLabel || "Learn more"}
+                            </Link>
+                          )}
                         </Box>
                       )}
+
+                      {hasChatFlow(faq.slug) && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => openSupportChat({ slug: faq.slug, title: faq.question, source: "faq" })}
+                        >
+                          Chat with Support
+                        </Button>
+                      )}
+
                       {Array.isArray(faq.photos) && faq.photos.length > 0 && (
                         <Grid container spacing={2}>
                           {faq.photos.map((photo, index) => (
@@ -283,56 +348,81 @@ export default function SupportPage() {
                   </Typography>
                   <Stack spacing={2}>
                     {group.topics.map((topic) => (
-                      <Box key={topic.slug} id={`topic-${topic.slug}`}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          {topic.title}
-                        </Typography>
-                        {expandedTopic === topic.slug ? (
-                          <Collapse in timeout="auto">
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                              {topic.description}
+                      <Accordion
+                        key={topic.slug}
+                        id={`topic-${topic.slug}`}
+                        expanded={expandedTopic === topic.slug}
+                        onChange={(_, isExpanded) => {
+                          if (isExpanded) {
+                            handleTopicSelect(topic.slug);
+                            return;
+                          }
+
+                          setExpandedTopic(null);
+                        }}
+                        disableGutters
+                        sx={{
+                          borderRadius: 2,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          overflow: "hidden",
+                          "&:before": { display: "none" }
+                        }}
+                      >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                              {topic.title}
                             </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Tap to view details and next actions
+                            </Typography>
+                          </Box>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            {topic.description}
+                          </Typography>
+
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                             {topic.resourceLink && (
-                              <Link
-                                href={topic.resourceLink.href}
-                                target={topic.resourceLink.href.startsWith("http") ? "_blank" : undefined}
-                                rel={topic.resourceLink.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                                underline="hover"
-                                sx={{ display: "inline-block", mb: 1 }}
+                              <>
+                                {isExternalLink(topic.resourceLink.href) ? (
+                                  <Button
+                                    component="a"
+                                    href={topic.resourceLink.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    size="small"
+                                    variant="text"
+                                  >
+                                    {topic.resourceLink.label}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    component={RouterLink}
+                                    to={topic.resourceLink.href}
+                                    size="small"
+                                    variant="text"
+                                  >
+                                    {topic.resourceLink.label}
+                                  </Button>
+                                )}
+                              </>
+                            )}
+
+                            {hasChatFlow(topic.slug) && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => openSupportChat({ slug: topic.slug, title: topic.title, source: "topic" })}
                               >
-                                {topic.resourceLink.label}
-                              </Link>
+                                Chat with Support
+                              </Button>
                             )}
-                            {topic.slug !== "password-reset" && (
-                              <Box>
-                                <Button size="small" variant="contained" onClick={handleCallSupport}>
-                                  Chat with Support
-                                </Button>
-                              </Box>
-                            )}
-                          </Collapse>
-                        ) : (
-                          <>
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{
-                                mb: 1,
-                                overflow: "hidden",
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
-                                textOverflow: "ellipsis"
-                              }}
-                            >
-                              {topic.description}
-                            </Typography>
-                            <Button size="small" onClick={() => handleTopicSelect(topic.slug)}>
-                              Learn more
-                            </Button>
-                          </>
-                        )}
-                      </Box>
+                          </Stack>
+                        </AccordionDetails>
+                      </Accordion>
                     ))}
                   </Stack>
                 </CardContent>
