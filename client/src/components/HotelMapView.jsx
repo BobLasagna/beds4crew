@@ -224,7 +224,8 @@ export default function MapView({
             right: 0,
             bottom: 0,
             zIndex: 1000,
-            bgcolor: 'rgba(0, 0, 0, 0.3)',
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.55)' : 'rgba(0, 0, 0, 0.3)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -234,10 +235,13 @@ export default function MapView({
         >
           <Box
             sx={{
-              bgcolor: 'white',
+              bgcolor: 'background.paper',
+              color: 'text.primary',
               p: 3,
               borderRadius: 2,
               boxShadow: 3,
+              border: '1px solid',
+              borderColor: 'divider',
               textAlign: 'center',
               maxWidth: '280px',
             }}
@@ -270,10 +274,12 @@ export default function MapView({
             onClick={handleRecenter}
             sx={{
               minWidth: 'auto',
-              bgcolor: 'white',
+              bgcolor: 'background.paper',
               color: 'text.primary',
+              border: '1px solid',
+              borderColor: 'divider',
               boxShadow: 2,
-              '&:hover': { bgcolor: 'grey.100' },
+              '&:hover': { bgcolor: 'action.hover' },
             }}
           >
             🎯 Recenter
@@ -284,10 +290,12 @@ export default function MapView({
             onClick={handleDeactivateMap}
             sx={{
               minWidth: 'auto',
-              bgcolor: 'white',
+              bgcolor: 'background.paper',
               color: 'text.primary',
+              border: '1px solid',
+              borderColor: 'divider',
               boxShadow: 2,
-              '&:hover': { bgcolor: 'grey.100' },
+              '&:hover': { bgcolor: 'action.hover' },
             }}
           >
             🔒 Lock Map

@@ -690,7 +690,7 @@ export default function ProfilePage() {
                   : `${tierInfo.tierName} Plan (${tierInfo.activeListings}/${tierInfo.listingLimit} listings used)`
                 }
               </Typography>
-              <Box sx={{ mb: 2, p: 2, backgroundColor: "#f5f5f5", borderRadius: 1 }}>
+              <Box sx={{ mb: 2, p: 2, backgroundColor: "background.paper", borderRadius: 1 }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
                   <Typography variant="body2">Active Listings</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
