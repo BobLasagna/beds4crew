@@ -23,6 +23,7 @@ import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, fetchJson, getStoredUser, setStoredUser, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { getListingMetrics } from "../utils/helpers";
+import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import { useLocation, useNavigate } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
 
@@ -429,7 +430,7 @@ export default function ProfilePage() {
       setTab(0);
 
       window.requestAnimationFrame(() => {
-        listingsTabRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollElementIntoViewWithOffset(listingsTabRef.current, { extraOffset: 16 });
       });
     }
   }, [location.search]);

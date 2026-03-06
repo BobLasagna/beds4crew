@@ -7,12 +7,11 @@ import { useNavigate, useLocation, Link as RouterLink } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
+import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import { SUPPORT_TOPIC_GROUPS, SUPPORT_TOPICS } from "../data/supportTopics";
 import supportFaqs from "../data/supportFaqs.json";
 import { hasChatFlow } from "../utils/chatFlowHelpers";
 
-
-// TODO FIX SCROLL ON TOPIC SELECT AND HASH CHANGE (ACCOUNT FOR STICKY HEADER)
 export default function SupportPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,34 +86,14 @@ export default function SupportPage() {
     const params = new URLSearchParams({ source, slug, title });
     navigate(`/support/chat?${params.toString()}`);
   };
-  const getScrollOffset = () => {
-    const stickyElements = document.querySelectorAll("header, [role='banner'], .MuiAppBar-root");
-    let offset = 16;
-
-    stickyElements.forEach((el) => {
-      const style = window.getComputedStyle(el);
-      if (style.position === "fixed" || style.position === "sticky") {
-        offset = Math.max(offset, el.getBoundingClientRect().height + 16);
-      }
-    });
-
-    return offset;
-  };
-
   const scrollToTopic = (slug) => {
     const el = document.getElementById(`topic-${slug}`);
-    if (!el) return;
-
-    const top = window.scrollY + el.getBoundingClientRect().top - getScrollOffset();
-    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+    scrollElementIntoViewWithOffset(el, { extraOffset: 16 });
   };
 
   const scrollToFaq = (slug) => {
     const el = document.getElementById(`faq-${slug}`);
-    if (!el) return;
-
-    const top = window.scrollY + el.getBoundingClientRect().top - getScrollOffset();
-    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+    scrollElementIntoViewWithOffset(el, { extraOffset: 16 });
   };
 
   useEffect(() => {

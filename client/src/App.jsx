@@ -59,7 +59,7 @@ const RouteChangeEffects = () => {
     if (activeElement && typeof activeElement.blur === "function") {
       activeElement.blur();
     }
-  }, [location.pathname, location.search, location.hash]);
+  }, [location.pathname, location.search]);
 
   return null;
 };

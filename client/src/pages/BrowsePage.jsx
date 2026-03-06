@@ -23,6 +23,7 @@ import MapView from '../components/HotelMapView';
 import PropertyCard from '../components/PropertyCard';
 import { useSnackbar } from '../components/AppSnackbar';
 import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, API_URL } from '../utils/api';
+import { scrollElementIntoViewWithOffset } from '../utils/scroll';
 import { useNavigate } from 'react-router-dom';
 
 //TODO: Move to config file or generate based off existing data
@@ -314,15 +315,8 @@ export default function BrowsePage() {
     }
     setSelectedPropertyId(property._id);
     window.requestAnimationFrame(() => {
-      const headerEl = document.querySelector('header, .MuiAppBar-root');
-      const headerOffset = headerEl?.getBoundingClientRect().height || 0;
       const mapEl = mapSectionRef.current;
-      if (!mapEl) return;
-      const mapTop = mapEl.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({
-        top: Math.max(mapTop - headerOffset - 12, 0),
-        behavior: 'smooth',
-      });
+      scrollElementIntoViewWithOffset(mapEl, { extraOffset: 12 });
     });
   };
 
@@ -396,16 +390,8 @@ export default function BrowsePage() {
     if (result.properties.length > 0) {
       setSelectedPropertyId(result.properties[0]._id);
       setTimeout(() => {
-        const headerEl = document.querySelector('header, .MuiAppBar-root');
-        const headerOffset = headerEl?.getBoundingClientRect().height || 0;
         const resultsEl = resultsListRef.current;
-        if (resultsEl) {
-          const resultsTop = resultsEl.getBoundingClientRect().top + window.scrollY;
-          window.scrollTo({
-            top: Math.max(resultsTop - headerOffset - 20, 0),
-            behavior: 'smooth',
-          });
-        }
+        scrollElementIntoViewWithOffset(resultsEl, { extraOffset: 20 });
       }, 100);
     }
 
