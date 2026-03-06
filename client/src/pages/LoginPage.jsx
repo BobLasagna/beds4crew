@@ -23,14 +23,14 @@ export default function LoginPage() {
     try {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Login failed");
 
-      // Store both tokens
-      setTokens(data.accessToken, data.refreshToken);
+      setTokens(null, null, data?.csrfToken);
       localStorage.setItem("user", JSON.stringify(data.user));
 
       snackbar("Login successful");

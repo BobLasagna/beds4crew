@@ -2,23 +2,25 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const router = express.Router();
+const requestTracker = new Map();
 
 
 // Middleware to enforce rate limiting (1 request per second)
 const rateLimit = (req, res, next) => {
   const now = Date.now();
-  const lastRequest = req.session?.lastRequest || 0;
+  const key = req.ip || "unknown";
+  const lastRequest = requestTracker.get(key) || 0;
   const delay = 1000; // 1 second in ms
 
   if (now - lastRequest < delay) {
     return res.status(429).json({ error: 'Rate limit exceeded. Please wait before making another request.' });
   }
 
-  req.session.lastRequest = now;
+  requestTracker.set(key, now);
   next();
 };
 
-router.get('/search', async (req, res) => {
+router.get('/search', rateLimit, async (req, res) => {
   const { q } = req.query;
   if (!q) {
     return res.status(400).json({ error: 'Missing query parameter' });

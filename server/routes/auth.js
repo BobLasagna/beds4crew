@@ -3,8 +3,18 @@ const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const verifyToken = require("../middleware/auth");
+const { isAllowlistedAdmin } = require("../middleware/auth");
 const { uploadSingle } = require("../utils/fileUpload");
-const { generateTokens } = require("../utils/tokenHelpers");
+const {
+  generateTokens,
+  setAuthCookies,
+  clearAuthCookies,
+  generateCsrfToken,
+  setCsrfCookie,
+  clearCsrfCookie,
+  REFRESH_COOKIE_NAME,
+  getJwtSecrets,
+} = require("../utils/tokenHelpers");
 const { validateEmail, validatePassword, sanitizeInput } = require("../utils/validation");
 const emailService = require("../utils/emailService");
 
@@ -97,7 +107,7 @@ router.post("/register", uploadSingle, async (req, res) => {
   } catch (error) {
     return res
       .status(500)
-      .json({ message: "Registration failed", error: error.message });
+      .json({ message: "Registration failed" });
   }
 });
 
@@ -114,7 +124,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Check if JWT secrets are configured
-    if (!process.env.JWT_SECRET || !process.env.REFRESH_TOKEN_SECRET) {
+    if (!process.env.JWT_SECRET || !(process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET)) {
       console.error("❌ JWT secrets not configured!");
       return res.status(500).json({ 
         message: "Server configuration error. Please contact support." 
@@ -149,16 +159,20 @@ router.post("/login", async (req, res) => {
     });
     await refreshTokenDoc.save();
 
+    setAuthCookies(res, accessToken, refreshToken);
+    const csrfToken = generateCsrfToken();
+    setCsrfCookie(res, csrfToken);
+
     console.log(`✅ User logged in successfully: ${normalizedEmail}`);
 
-    // Return tokens + user info
+    // Return user info (+ csrf token for client header contract)
     return res.json({
-      accessToken,
-      refreshToken,
+      csrfToken,
       user: {
         id: user._id,
         email: user.email,
         role: user.role,
+        isAdmin: isAllowlistedAdmin(user),
         firstName: user.firstName,
         lastName: user.lastName,
         profileImagePath: user.profileImagePath,
@@ -171,14 +185,15 @@ router.post("/login", async (req, res) => {
     console.error("Login error:", error);
     return res
       .status(500)
-      .json({ message: "Login failed", error: error.message });
+      .json({ message: "Login failed" });
   }
 });
 
 // Refresh token endpoint
 router.post("/refresh", async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { refreshToken: bodyRefreshToken } = req.body || {};
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || bodyRefreshToken;
 
     if (!refreshToken) {
       return res.status(400).json({ message: "Refresh token required" });
@@ -195,7 +210,8 @@ router.post("/refresh", async (req, res) => {
 
     // Verify JWT signature
     try {
-      jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+      const { refreshSecret } = getJwtSecrets();
+      jwt.verify(refreshToken, refreshSecret);
     } catch (error) {
       await RefreshToken.deleteOne({ token: refreshToken });
       return res.status(401).json({ message: "Refresh token expired" });
@@ -215,32 +231,45 @@ router.post("/refresh", async (req, res) => {
       }
     );
 
+    setAuthCookies(res, accessToken, newRefreshToken);
+    const csrfToken = generateCsrfToken();
+    setCsrfCookie(res, csrfToken);
+
     return res.json({
-      accessToken,
-      refreshToken: newRefreshToken,
+      csrfToken,
     });
   } catch (error) {
     return res
       .status(500)
-      .json({ message: "Token refresh failed", error: error.message });
+      .json({ message: "Token refresh failed" });
   }
 });
 
 // Logout route
 router.post("/logout", async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { refreshToken: bodyRefreshToken } = req.body || {};
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || bodyRefreshToken;
 
     if (refreshToken) {
       await RefreshToken.deleteOne({ token: refreshToken });
     }
 
+    clearAuthCookies(res);
+    clearCsrfCookie(res);
+
     return res.json({ message: "Logged out successfully" });
   } catch (error) {
     return res
       .status(500)
-      .json({ message: "Logout failed", error: error.message });
+      .json({ message: "Logout failed" });
   }
+});
+
+router.get("/csrf", (req, res) => {
+  const csrfToken = generateCsrfToken();
+  setCsrfCookie(res, csrfToken);
+  return res.json({ csrfToken });
 });
 
 router.post("/password/request-reset", async (req, res) => {
@@ -266,7 +295,7 @@ router.post("/password/request-reset", async (req, res) => {
 
     return res.json({ message: genericMessage });
   } catch (error) {
-    return res.status(500).json({ message: "Failed to process password reset request", error: error.message });
+    return res.status(500).json({ message: "Failed to process password reset request" });
   }
 });
 
@@ -284,7 +313,7 @@ router.post("/password/request-change", verifyToken, async (req, res) => {
 
     return res.json({ message: "We sent a password change link to your email. The link expires in 30 minutes." });
   } catch (error) {
-    return res.status(500).json({ message: "Failed to start password change", error: error.message });
+    return res.status(500).json({ message: "Failed to start password change" });
   }
 });
 
@@ -323,7 +352,7 @@ router.post("/password/confirm-reset", async (req, res) => {
 
     return res.json({ message: "Password reset successful. Please sign in with your new password." });
   } catch (error) {
-    return res.status(500).json({ message: "Failed to reset password", error: error.message });
+    return res.status(500).json({ message: "Failed to reset password" });
   }
 });
 
@@ -358,7 +387,7 @@ router.put("/profile", verifyToken, async (req, res) => {
     );
     res.json(user);
   } catch (error) {
-    res.status(500).json({ message: "Profile update failed", error: error.message });
+    res.status(500).json({ message: "Profile update failed" });
   }
 });
 
@@ -405,7 +434,7 @@ router.post("/profile/photo", verifyToken, uploadSingle, async (req, res) => {
     });
   } catch (error) {
     console.error("Profile photo upload error:", error);
-    res.status(500).json({ message: "Failed to upload profile photo", error: error.message });
+    res.status(500).json({ message: "Failed to upload profile photo" });
   }
 });
 
@@ -444,7 +473,7 @@ router.delete("/profile/photo", verifyToken, async (req, res) => {
     res.json({ message: "Profile photo removed successfully" });
   } catch (error) {
     console.error("Profile photo deletion error:", error);
-    res.status(500).json({ message: "Failed to remove profile photo", error: error.message });
+    res.status(500).json({ message: "Failed to remove profile photo" });
   }
 });
 
@@ -454,7 +483,7 @@ router.get("/me", verifyToken, async (req, res) => {
     const user = await User.findById(req.user.id).select("-password").lean();
     if (!user) return res.status(404).json({ message: "User not found" });
     // Ensure hasPaid is always included
-    res.json({ ...user, hasPaid: user.hasPaid || false });
+    res.json({ ...user, hasPaid: user.hasPaid || false, isAdmin: isAllowlistedAdmin(user) });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch user profile" });
   }

@@ -1,7 +1,65 @@
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+
+const ACCESS_COOKIE_NAME = "b4c_access";
+const REFRESH_COOKIE_NAME = "b4c_refresh";
+const CSRF_COOKIE_NAME = "b4c_csrf";
+
+const isProduction = process.env.NODE_ENV === "production";
+
+const getJwtSecrets = () => {
+  const accessSecret = process.env.JWT_SECRET;
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET;
+
+  if (!accessSecret || !refreshSecret) {
+    throw new Error("JWT secrets are not fully configured");
+  }
+
+  return { accessSecret, refreshSecret };
+};
+
+const getCookieOptions = (maxAgeMs = 0) => ({
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: "lax",
+  path: "/",
+  ...(maxAgeMs ? { maxAge: maxAgeMs } : {}),
+});
+
+const setAuthCookies = (res, accessToken, refreshToken) => {
+  res.cookie(ACCESS_COOKIE_NAME, accessToken, getCookieOptions(15 * 60 * 1000));
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, getCookieOptions(7 * 24 * 60 * 60 * 1000));
+};
+
+const clearAuthCookies = (res) => {
+  res.clearCookie(ACCESS_COOKIE_NAME, getCookieOptions());
+  res.clearCookie(REFRESH_COOKIE_NAME, getCookieOptions());
+};
+
+const generateCsrfToken = () => crypto.randomBytes(24).toString("hex");
+
+const setCsrfCookie = (res, csrfToken) => {
+  res.cookie(CSRF_COOKIE_NAME, csrfToken, {
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+};
+
+const clearCsrfCookie = (res) => {
+  res.clearCookie(CSRF_COOKIE_NAME, {
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+  });
+};
 
 // Generate access and refresh tokens
 const generateTokens = (user) => {
+  const { accessSecret, refreshSecret } = getJwtSecrets();
   const payload = {
     id: user._id,
     email: user.email,
@@ -12,18 +70,25 @@ const generateTokens = (user) => {
   };
 
   // Access token - short lived (15 minutes)
-  const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
+  const accessToken = jwt.sign(payload, accessSecret, {
     expiresIn: "15m",
   });
 
   // Refresh token - long lived (7 days)
-  const refreshToken = jwt.sign(
-    { id: user._id },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: "7d" }
-  );
+  const refreshToken = jwt.sign({ id: user._id }, refreshSecret, { expiresIn: "7d" });
 
   return { accessToken, refreshToken };
 };
 
-module.exports = { generateTokens };
+module.exports = {
+  ACCESS_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  getJwtSecrets,
+  setAuthCookies,
+  clearAuthCookies,
+  generateCsrfToken,
+  setCsrfCookie,
+  clearCsrfCookie,
+  generateTokens,
+};

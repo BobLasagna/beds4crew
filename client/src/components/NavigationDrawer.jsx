@@ -77,7 +77,7 @@ export default function NavigationDrawer({ children }) {
   const location = useLocation();
   const snackbar = useSnackbar();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const { mode, toggleTheme } = useThemeMode();
+  const { mode, toggleTheme, reEnableCookieNotice } = useThemeMode();
 
   useEffect(() => {
     if (!isEmpty(user)) {
@@ -228,7 +228,7 @@ export default function NavigationDrawer({ children }) {
           <ListItemIcon><SupportIcon /></ListItemIcon>
           <ListItemText primary="Support" />
         </ListItemButton>
-        {user.id === "698c112bbc6f9ffd822acf3c" && (
+        {user.isAdmin && (
           <ListItemButton onClick={() => (clickedIconLink("/admin"))}>
             <ListItemIcon><AdminPanelSettingsIcon /></ListItemIcon>
             <ListItemText primary="Admin" />
@@ -302,6 +302,15 @@ export default function NavigationDrawer({ children }) {
             {mode === 'light' ? <DarkModeIcon /> : <LightModeIcon />}
           </ListItemIcon>
           <ListItemText primary={mode === 'light' ? 'Dark Mode' : 'Light Mode'} />
+        </ListItemButton>
+        <ListItemButton
+          onClick={() => {
+            reEnableCookieNotice();
+            snackbar("Cookie notice will be shown again.", "info");
+          }}
+        >
+          <ListItemIcon><SettingsIcon /></ListItemIcon>
+          <ListItemText primary="Show Cookie Notice" />
         </ListItemButton>
         <ListItemButton onClick={handleLogout}>
           <ListItemIcon><LogoutIcon /></ListItemIcon>

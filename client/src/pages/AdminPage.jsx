@@ -36,13 +36,10 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
-const ADMIN_ID = '698c112bbc6f9ffd822acf3c';
-const ADMIN_EMAIL = 'r.papagna@gmail.com';
 
 export default function AdminPage() {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
-  const [currentUser, setCurrentUser] = useState(null);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
@@ -87,10 +84,20 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        setCurrentUser(user);
+        const meResponse = await fetchWithAuth(`${API_URL}/auth/me`);
+        if (!meResponse.ok) {
+          throw new Error('Unable to verify admin session');
+        }
+        const meData = await meResponse.json();
+        const user = {
+          ...(JSON.parse(localStorage.getItem('user') || '{}')),
+          ...(meData || {}),
+          id: meData?._id || meData?.id,
+          isAdmin: !!meData?.isAdmin,
+        };
+        localStorage.setItem('user', JSON.stringify(user));
 
-        if (user.id === ADMIN_ID && user.email === ADMIN_EMAIL) {
+        if (user.isAdmin) {
           setAuthorized(true);
           fetchUsers();
           fetchListings();
@@ -521,8 +528,6 @@ export default function AdminPage() {
                     <TableBody>
                       {paginatedUsers.map(user => {
                         const isAccountActive = user.isActive !== false;
-                        const subStatus = user.subscriptionStatus || '';
-                        const hasStripe = Boolean(user.stripeCustomerId);
                         
                         let displayLabel = isAccountActive ? 'Active' : 'Inactive';
                         let displayColor = isAccountActive ? 'success' : 'error';

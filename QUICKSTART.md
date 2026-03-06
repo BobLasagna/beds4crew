@@ -75,10 +75,21 @@ All routes are lazy-loaded:
 
 ### Security
 - Input sanitization on all user inputs
-- JWT with refresh token rotation
+- HttpOnly cookie auth with refresh token rotation
+- CSRF protection on state-changing API routes
+- Admin access controlled by environment allowlist
 - File upload size limits (5MB)
 - Email validation
 - Password strength requirements
+
+### Auth Rollout Flags
+
+Set these server environment variables to control rollout behavior:
+
+- `AUTH_USE_HTTP_ONLY_COOKIES=true`
+- `AUTH_REQUIRE_CSRF=true`
+- `ADMIN_ALLOWLIST_EMAILS=admin@example.com`
+- `ADMIN_ALLOWLIST_IDS=`
 
 ## 🛠️ Development Tips
 

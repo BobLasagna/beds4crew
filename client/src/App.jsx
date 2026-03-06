@@ -1,15 +1,16 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Box, CircularProgress } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Snackbar } from "@mui/material";
 
 import { SnackbarProvider } from "./components/AppSnackbar";
 import NavigationDrawer from "./components/NavigationDrawer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
-import { fetchWithAuth, API_URL } from "./utils/api";
+import { clearTokens, fetchJsonWithAuth, getStoredUser, setStoredUser, API_URL } from "./utils/api";
 import { SUPPORT_INTERNAL_PATHS } from "./data/supportTopics";
+import { useThemeMode } from "./contexts/ThemeContext";
 
 // Lazy load pages for code splitting
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
@@ -64,15 +65,24 @@ const RouteChangeEffects = () => {
 };
 
 function App() {
+  const { cookieNoticeDismissed, dismissCookieNotice, reEnableCookieNotice } = useThemeMode();
+  const [showCookieNotice, setShowCookieNotice] = useState(false);
+
   useEffect(() => {
-    // On app load, refresh user data from server to sync localStorage
-    const storedUser = JSON.parse(localStorage.getItem("user") || "null");
-    if (storedUser?.id) {
-      fetchWithAuth(`${API_URL}/auth/me`)
-        .then(res => res.ok ? res.json() : null)
+    const shouldShowNotice = import.meta.env.VITE_SHOW_COOKIE_NOTICE !== 'false' && !cookieNoticeDismissed;
+    setShowCookieNotice(shouldShowNotice);
+  }, [cookieNoticeDismissed]);
+
+  useEffect(() => {
+    // On app load, refresh user data from server to sync localStorage/session
+    const hasSession = localStorage.getItem("authSession") === "true";
+    const storedUser = getStoredUser();
+
+    if (storedUser?.id || hasSession) {
+      fetchJsonWithAuth(`${API_URL}/auth/me`)
         .then(data => {
           if (data) {
-            localStorage.setItem("user", JSON.stringify({
+            setStoredUser({
               id: data._id || data.id,
               email: data.email,
               role: data.role,
@@ -82,14 +92,25 @@ function App() {
               hasPaid: data.hasPaid,
               phone: data.phone,
               bio: data.bio,
+              isAdmin: !!data.isAdmin,
               subscriptionStatus: data.subscriptionStatus,
               subscriptionCurrentPeriodEnd: data.subscriptionCurrentPeriodEnd,
-            }));
+            });
           }
         })
-        .catch(err => console.error("Failed to refresh user data:", err));
+        .catch(() => clearTokens());
     }
   }, []);
+
+  const handleDismissCookieNotice = () => {
+    dismissCookieNotice();
+    setShowCookieNotice(false);
+  };
+
+  const handleKeepReminding = () => {
+    reEnableCookieNotice();
+    setShowCookieNotice(false);
+  };
 
   return (
     <Router>
@@ -123,6 +144,29 @@ function App() {
                 <Route path="*" element={<Navigate to="/login" />} />
               </Routes>
             </Suspense>
+            <Snackbar
+              open={showCookieNotice}
+              anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+              autoHideDuration={null}
+            >
+              <Alert
+                severity="info"
+                variant="filled"
+                onClose={handleDismissCookieNotice}
+                action={(
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <Button color="inherit" size="small" onClick={handleKeepReminding}>
+                      Keep showing
+                    </Button>
+                    <Button color="inherit" size="small" onClick={handleDismissCookieNotice}>
+                      Dismiss
+                    </Button>
+                  </Box>
+                )}
+              >
+                We use secure cookies to keep you signed in and protect account actions.
+              </Alert>
+            </Snackbar>
           </NavigationDrawer>
         </SnackbarProvider>
       </LocalizationProvider>

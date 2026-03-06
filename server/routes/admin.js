@@ -4,24 +4,44 @@ const Property = require("../models/Property");
 const Booking = require("../models/Booking");
 const Ticket = require("../models/Ticket");
 const verifyToken = require("../middleware/auth");
+const { verifyAdmin } = require("../middleware/auth");
 const router = express.Router();
 
-const ADMIN_ID = process.env.BEDS4CREW_ADMIN_ID;;
-const ADMIN_EMAIL = process.env.BEDS4CREW_ADMIN_EMAIL;
-
-// Middleware to verify admin access
-const verifyAdmin = (req, res, next) => {
-  if (req.user.id !== ADMIN_ID || req.user.email !== ADMIN_EMAIL) {
-    return res.status(403).json({ message: "Unauthorized: Admin access required" });
-  }
-  next();
+const parsePagination = (req) => {
+  const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+  return { hasPagination, page, limit, skip: (page - 1) * limit };
 };
 
 // Get all users
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const users = await User.find({}).select("-password").lean();
-    res.json(users);
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = User.find({})
+      .select("firstName lastName email role hasPaid isActive stripeCurrentTier listingLimit subscriptionStatus stripeSubscriptionId createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!hasPagination) {
+      const users = await query;
+      return res.json(users);
+    }
+
+    const [users, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      User.countDocuments({}),
+    ]);
+
+    return res.json({
+      items: users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch users", error: error.message });
   }
@@ -72,11 +92,6 @@ router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
 // Delete user
 router.delete("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    // Don't allow deleting the admin user
-    if (req.params.userId === ADMIN_ID) {
-      return res.status(400).json({ message: "Cannot delete admin user" });
-    }
-
     const user = await User.findByIdAndDelete(req.params.userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -91,10 +106,32 @@ router.delete("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
 // Get all properties (admin view)
 router.get("/properties", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const properties = await Property.find({})
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Property.find({})
+      .select("title description pricePerNight maxGuests category status city country ownerHost createdAt")
       .populate("ownerHost", "firstName lastName email hasPaid")
+      .sort({ createdAt: -1 })
       .lean();
-    res.json(properties);
+
+    if (!hasPagination) {
+      const properties = await query;
+      return res.json(properties);
+    }
+
+    const [properties, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Property.countDocuments({}),
+    ]);
+
+    return res.json({
+      items: properties,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch properties", error: error.message });
   }
@@ -143,13 +180,34 @@ router.delete("/properties/:propertyId", verifyToken, verifyAdmin, async (req, r
 // Get all bookings (admin view)
 router.get("/bookings", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const bookings = await Booking.find({})
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Booking.find({})
+      .select("property guest host startDate endDate totalPrice status unreadByGuest unreadByHost createdAt")
       .populate("guest", "firstName lastName email")
       .populate("host", "firstName lastName email")
       .populate("property", "title city country")
       .sort({ createdAt: -1 })
       .lean();
-    res.json(bookings);
+
+    if (!hasPagination) {
+      const bookings = await query;
+      return res.json(bookings);
+    }
+
+    const [bookings, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Booking.countDocuments({}),
+    ]);
+
+    return res.json({
+      items: bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
   }

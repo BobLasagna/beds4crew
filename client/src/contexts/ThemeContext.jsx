@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -13,10 +14,14 @@ export const useThemeMode = () => {
 };
 
 export const ThemeContextProvider = ({ children }) => {
+  const COOKIE_NOTICE_KEY = 'cookieNoticeDismissed';
   // Get initial mode from localStorage, default to 'light'
   const [mode, setMode] = useState(() => {
     const savedMode = localStorage.getItem('themeMode');
     return savedMode || 'light';
+  });
+  const [cookieNoticeDismissed, setCookieNoticeDismissed] = useState(() => {
+    return localStorage.getItem(COOKIE_NOTICE_KEY) === 'true';
   });
 
   // Persist mode to localStorage and update body data-theme attribute whenever it changes
@@ -25,8 +30,20 @@ export const ThemeContextProvider = ({ children }) => {
     document.body.setAttribute('data-theme', mode);
   }, [mode]);
 
+  useEffect(() => {
+    localStorage.setItem(COOKIE_NOTICE_KEY, cookieNoticeDismissed ? 'true' : 'false');
+  }, [cookieNoticeDismissed]);
+
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
+  };
+
+  const dismissCookieNotice = () => {
+    setCookieNoticeDismissed(true);
+  };
+
+  const reEnableCookieNotice = () => {
+    setCookieNoticeDismissed(false);
   };
 
   // Create theme based on current mode
@@ -118,7 +135,9 @@ export const ThemeContextProvider = ({ children }) => {
   );
 
   return (
-    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{ mode, toggleTheme, cookieNoticeDismissed, dismissCookieNotice, reEnableCookieNotice }}
+    >
       <ThemeProvider theme={theme}>
         <CssBaseline />
         {children}

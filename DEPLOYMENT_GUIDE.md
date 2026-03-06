@@ -126,6 +126,14 @@ services:
         sync: false
       - key: JWT_REFRESH_SECRET
         sync: false
+         - key: AUTH_USE_HTTP_ONLY_COOKIES
+            value: true
+         - key: AUTH_REQUIRE_CSRF
+            value: true
+         - key: ADMIN_ALLOWLIST_EMAILS
+            sync: false
+         - key: ADMIN_ALLOWLIST_IDS
+            sync: false
 
   # Frontend Client
   - type: web
@@ -209,6 +217,10 @@ git push -u origin main
    | `MONGO_URL` | Your MongoDB connection string from Part 1 Step 1.4 |
    | `JWT_SECRET` | Generate secure secret (see below) |
    | `JWT_REFRESH_SECRET` | Generate another secure secret (see below) |
+   | `AUTH_USE_HTTP_ONLY_COOKIES` | `true` |
+   | `AUTH_REQUIRE_CSRF` | `true` |
+   | `ADMIN_ALLOWLIST_EMAILS` | Comma-separated admin emails |
+   | `ADMIN_ALLOWLIST_IDS` | Comma-separated admin user IDs (optional) |
 
    **To generate JWT secrets**, run these commands in your terminal:
    ```bash

@@ -4,11 +4,14 @@ const API_URL = import.meta.env.VITE_API_URL ||
   (import.meta.env.MODE === 'production' ? '/api' : 'http://localhost:3001/api');
 export const BASE_URL = API_URL.replace('/api', ''); // Base URL without /api
 export { API_URL };
+const AUTH_COOKIE_MODE = import.meta.env.VITE_AUTH_COOKIE_MODE !== 'false';
+const CSRF_STORAGE_KEY = 'csrfToken';
+const AUTH_SESSION_KEY = 'authSession';
 
 // Simple in-memory cache for client-side requests
 const clientCache = new Map();
 
-const getCached = (key, ttlSeconds = 60) => {
+const getCached = (key) => {
   const cached = clientCache.get(key);
   if (!cached) return null;
   
@@ -41,17 +44,72 @@ const clearCache = (pattern) => {
   }
 };
 
-// Store tokens
-export const setTokens = (accessToken, refreshToken) => {
-  localStorage.setItem("accessToken", accessToken);
-  localStorage.setItem("refreshToken", refreshToken);
+const isStateChangingMethod = (method = 'GET') => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+
+const readCookie = (name) => {
+  const cookieName = `${name}=`;
+  const allCookies = document.cookie.split(';');
+  for (const rawCookie of allCookies) {
+    const cookie = rawCookie.trim();
+    if (cookie.startsWith(cookieName)) {
+      return decodeURIComponent(cookie.substring(cookieName.length));
+    }
+  }
+  return '';
 };
 
-export const getAccessToken = () => localStorage.getItem("accessToken");
-export const getRefreshToken = () => localStorage.getItem("refreshToken");
+const getCsrfToken = () => localStorage.getItem(CSRF_STORAGE_KEY) || readCookie('b4c_csrf');
+
+const setCsrfToken = (token) => {
+  if (!token) return;
+  localStorage.setItem(CSRF_STORAGE_KEY, token);
+};
+
+const ensureCsrfToken = async () => {
+  const existing = getCsrfToken();
+  if (existing) return existing;
+
+  const response = await fetch(`${API_URL}/auth/csrf`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to initialize CSRF token');
+  }
+
+  const data = await response.json();
+  setCsrfToken(data?.csrfToken);
+  return data?.csrfToken;
+};
+
+// Backward-compatible auth helpers now using cookie session markers
+export const setTokens = (_accessToken, _refreshToken, csrfToken = null) => {
+  localStorage.setItem(AUTH_SESSION_KEY, 'true');
+  if (csrfToken) {
+    setCsrfToken(csrfToken);
+  }
+};
+
+export const getAccessToken = () => (localStorage.getItem(AUTH_SESSION_KEY) === 'true' ? 'cookie-session' : null);
+export const getRefreshToken = () => null;
+
+export const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "{}");
+  } catch {
+    return {};
+  }
+};
+
+export const setStoredUser = (user) => {
+  localStorage.setItem("user", JSON.stringify(user || {}));
+};
 
 // Clear tokens on logout
 export const clearTokens = () => {
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  localStorage.removeItem(CSRF_STORAGE_KEY);
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("user");
@@ -60,19 +118,11 @@ export const clearTokens = () => {
 
 // Refresh access token using refresh token
 export const refreshAccessToken = async () => {
-  const refreshToken = getRefreshToken();
-
-  if (!refreshToken) {
-    clearTokens();
-    window.location.href = "/login";
-    throw new Error("No refresh token available");
-  }
-
   try {
     const response = await fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
+      credentials: 'include',
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
     });
 
     if (!response.ok) {
@@ -81,18 +131,18 @@ export const refreshAccessToken = async () => {
     }
 
     const data = await response.json();
-    setTokens(data.accessToken, data.refreshToken);
-    return data.accessToken;
+    setTokens(null, null, data?.csrfToken);
+    return true;
   } catch (error) {
     clearTokens();
-    window.location.href = "/login";
     throw error;
   }
 };
 
 // Wrapper for fetch with automatic token refresh and caching
 export const fetchWithAuth = async (url, options = {}) => {
-  const cacheKey = `${options.method || 'GET'}:${url}`;
+  const method = (options.method || 'GET').toUpperCase();
+  const cacheKey = `${method}:${url}`;
   
   // Check cache for GET requests
   if (!options.method || options.method === 'GET') {
@@ -102,47 +152,45 @@ export const fetchWithAuth = async (url, options = {}) => {
     }
   }
   
-  let accessToken = getAccessToken();
-
-  if (!accessToken) {
+  if (!AUTH_COOKIE_MODE && !getAccessToken()) {
     throw new Error("No access token available");
   }
 
-  // Don't set Content-Type if FormData is being sent (file uploads)
   const headers = {
     ...options.headers,
-    Authorization: `Bearer ${accessToken}`,
   };
   
+  if (AUTH_COOKIE_MODE && isStateChangingMethod(method)) {
+    const csrfToken = await ensureCsrfToken();
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+
   if (!(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
 
   let response = await fetch(url, {
     ...options,
+    method,
+    credentials: 'include',
     headers,
   });
 
   // If 401, try refreshing token and retry
   if (response.status === 401) {
-    try {
-      accessToken = await refreshAccessToken();
-      const retryHeaders = {
-        ...options.headers,
-        Authorization: `Bearer ${accessToken}`,
-      };
-      
-      if (!(options.body instanceof FormData)) {
-        retryHeaders["Content-Type"] = "application/json";
-      }
+    await refreshAccessToken();
+    const retryHeaders = { ...headers };
 
-      response = await fetch(url, {
-        ...options,
-        headers: retryHeaders,
-      });
-    } catch (error) {
-      throw error;
+    if (AUTH_COOKIE_MODE && isStateChangingMethod(method)) {
+      retryHeaders['X-CSRF-Token'] = await ensureCsrfToken();
     }
+
+    response = await fetch(url, {
+      ...options,
+      method,
+      credentials: 'include',
+      headers: retryHeaders,
+    });
   }
   
   // Cache successful GET responses
@@ -152,7 +200,7 @@ export const fetchWithAuth = async (url, options = {}) => {
   }
   
   // Clear cache on mutations
-  if (response.ok && options.method && ['POST', 'PUT', 'DELETE'].includes(options.method)) {
+  if (response.ok && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     clearCache('properties');
     clearCache('bookings');
     clearCache('tickets');
@@ -161,15 +209,38 @@ export const fetchWithAuth = async (url, options = {}) => {
   return response;
 };
 
+export const fetchJson = async (url, options = {}) => {
+  const response = await fetch(url, {
+    credentials: 'include',
+    ...options,
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Request failed");
+  }
+
+  return data;
+};
+
+export const fetchJsonWithAuth = async (url, options = {}) => {
+  const response = await fetchWithAuth(url, options);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Request failed");
+  }
+
+  return data;
+};
+
 // Logout function
 export const logout = async () => {
-  const refreshToken = getRefreshToken();
-
   try {
     await fetch(`${API_URL}/auth/logout`, {
       method: "POST",
+      credentials: 'include',
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
     });
   } catch (error) {
     console.error("Logout error:", error);
@@ -247,7 +318,8 @@ export const fetchBedAvailability = async (propertyId, startDate, endDate) => {
     }
     
     const response = await fetch(
-      `${API_URL}/properties/${propertyId}/bed-availability?startDate=${start}&endDate=${end}`
+      `${API_URL}/properties/${propertyId}/bed-availability?startDate=${start}&endDate=${end}`,
+      { credentials: 'include' }
     );
     
     if (!response.ok) {
