@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Typography,
@@ -11,8 +11,6 @@ import {
   TextField,
   MenuItem,
   Slider,
-  FormControlLabel,
-  Switch,
   Select,
   InputLabel,
   FormControl,
@@ -20,6 +18,9 @@ import {
   Skeleton,
   ToggleButton,
   ToggleButtonGroup,
+  Checkbox,
+  ListItemText,
+  OutlinedInput,
 } from "@mui/material";
 import { useLocation, useSearchParams } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
@@ -27,8 +28,10 @@ import { NoPropertiesFound } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
+import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 
 const RESULTS_PER_PAGE = 12;
+const MAX_PRICE = 500;
 
 export default function PropertyFeedPage() {
   const [properties, setProperties] = useState([]);
@@ -37,22 +40,29 @@ export default function PropertyFeedPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState("");
+  const [queryInput, setQueryInput] = useState("");
   const [category, setCategory] = useState("");
   const [type, setType] = useState("");
-  const [priceRange, setPriceRange] = useState([0, 1000]);
-  const [maxPrice, setMaxPrice] = useState(1000);
+
+  const [selectedFacilities, setSelectedFacilities] = useState([]);
+  const [priceRange, setPriceRange] = useState([0, MAX_PRICE]);
   const [minRating, setMinRating] = useState(0);
-  const [instantBook, setInstantBook] = useState(false);
+
+  const [appliedFacilities, setAppliedFacilities] = useState([]);
+  const [appliedPriceRange, setAppliedPriceRange] = useState([0, MAX_PRICE]);
+  const [appliedMinRating, setAppliedMinRating] = useState(0);
+
   const [sortBy, setSortBy] = useState("best");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [priceInitialized, setPriceInitialized] = useState(false);
   const [gridColumns, setGridColumns] = useState(3);
+  const listingsTopRef = useRef(null);
   const user = getStoredUser();
   const location = useLocation();
   const snackbar = useSnackbar();
   const gridOptions = [5, 3, 2, 1];
+  const facilityOptions = ["AC", "BBQ", "Laundry", "WiFi", "Kitchen", "Parking", "Pool", "TV", "Workspace"];
   
   // Fetch user's wishlist on mount and when navigating to this page
   useEffect(() => {
@@ -100,11 +110,20 @@ export default function PropertyFeedPage() {
         query,
         category,
         type,
-        minPrice: String(priceRange[0]),
-        maxPrice: String(priceRange[1]),
-        minRating: String(minRating),
-        instantBook: instantBook ? "true" : "false",
+        minRating: String(appliedMinRating),
       });
+
+      if (appliedPriceRange[0] > 0) {
+        params.set("minPrice", String(appliedPriceRange[0]));
+      }
+
+      if (appliedPriceRange[1] < MAX_PRICE) {
+        params.set("maxPrice", String(appliedPriceRange[1]));
+      }
+
+      if (appliedFacilities.length > 0) {
+        params.set("facilities", appliedFacilities.join(","));
+      }
 
       const data = await fetchJson(`${API_URL}/properties?${params.toString()}`);
 
@@ -124,17 +143,6 @@ export default function PropertyFeedPage() {
       setCurrentPage(pagination.page || page);
       setTotalResults(pagination.total ?? items.length);
       setTotalPages(pagination.totalPages || 1);
-
-      const nextMaxPrice = data?.filters?.maxPrice;
-      if (typeof nextMaxPrice === "number" && nextMaxPrice > 0) {
-        setMaxPrice(nextMaxPrice);
-        if (!priceInitialized) {
-          setPriceRange([0, nextMaxPrice]);
-          setPriceInitialized(true);
-        } else if (priceRange[1] > nextMaxPrice) {
-          setPriceRange([priceRange[0], nextMaxPrice]);
-        }
-      }
     } catch (err) {
       console.error("Failed to fetch properties:", err);
       snackbar(err.message || "Failed to load listings", "error");
@@ -159,9 +167,9 @@ export default function PropertyFeedPage() {
     query,
     category,
     type,
-    priceRange,
-    minRating,
-    instantBook,
+    appliedPriceRange,
+    appliedMinRating,
+    appliedFacilities,
     sortBy,
   ]);
 
@@ -169,12 +177,13 @@ export default function PropertyFeedPage() {
     const initialQuery = searchParams.get("query") || "";
     const initialCategory = searchParams.get("category") || "";
     setQuery(initialQuery);
+    setQueryInput(initialQuery);
     setCategory(initialCategory);
   }, [searchParams]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [query, category, type, priceRange, minRating, instantBook, sortBy]);
+  }, [query, category, type, appliedPriceRange, appliedMinRating, appliedFacilities, sortBy]);
 
   const visibleListings = useMemo(() => properties, [properties]);
 
@@ -191,19 +200,38 @@ export default function PropertyFeedPage() {
     return items;
   }, [category, type]);
 
+  const applyTextSearch = () => {
+    setQuery(queryInput.trim());
+    setAppliedPriceRange(priceRange);
+    setAppliedMinRating(minRating);
+    setAppliedFacilities(selectedFacilities);
+    requestAnimationFrame(() => {
+      scrollElementIntoViewWithOffset(listingsTopRef.current, { extraOffset: 12 });
+    });
+  };
+
+  const handleResetFilters = () => {
+    const resetPriceRange = [0, MAX_PRICE];
+    setCategory("");
+    setType("");
+    setQueryInput("");
+    setQuery("");
+    setPriceRange(resetPriceRange);
+    setMinRating(0);
+    setSelectedFacilities([]);
+    setAppliedPriceRange(resetPriceRange);
+    setAppliedMinRating(0);
+    setAppliedFacilities([]);
+    requestAnimationFrame(() => {
+      scrollElementIntoViewWithOffset(listingsTopRef.current, { extraOffset: 12 });
+    });
+  };
+
   const filterPanel = (
     <Box sx={{ width: { xs: 280, md: 300 }, p: 2 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
         Filters
       </Typography>
-      <TextField
-        label="Search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        fullWidth
-        size="small"
-        sx={{ mb: 2 }}
-      />
       <TextField
         select
         label="Category"
@@ -235,42 +263,82 @@ export default function PropertyFeedPage() {
         <MenuItem value="private">Private Room</MenuItem>
         <MenuItem value="bed">Individual Bed</MenuItem>
       </TextField>
+      <Divider sx={{ my: 2 }} />
       <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
         Price range
       </Typography>
       <Slider
         value={priceRange}
         min={0}
-        max={maxPrice}
+        max={MAX_PRICE}
         onChange={(_, value) => setPriceRange(value)}
         valueLabelDisplay="auto"
       />
       <Typography variant="caption" color="text.secondary">
-        ${priceRange[0]} - ${priceRange[1]}
+        {priceRange[0] === 0 && priceRange[1] === MAX_PRICE
+          ? "Any price"
+          : `$${priceRange[0]} - $${priceRange[1]}`}
       </Typography>
-      <Divider sx={{ my: 2 }} />
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          Minimum rating
+        </Typography>
+        <Slider
+          value={minRating}
+          min={0}
+          max={5}
+          step={0.1}
+          onChange={(_, value) => setMinRating(value)}
+          valueLabelDisplay="auto"
+        />
+      </Box>
+      <Box sx={{ mt: 2 }}>
+        <FormControl fullWidth size="small">
+          <InputLabel id="facilities-filter-label">Facilities</InputLabel>
+          <Select
+            labelId="facilities-filter-label"
+            multiple
+            value={selectedFacilities}
+            onChange={(e) => setSelectedFacilities(e.target.value)}
+            input={<OutlinedInput label="Facilities" />}
+            renderValue={(selected) => selected.join(", ")}
+          >
+            {facilityOptions.map((facility) => (
+              <MenuItem key={facility} value={facility}>
+                <Checkbox checked={selectedFacilities.includes(facility)} />
+                <ListItemText primary={facility} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
       <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-        Minimum rating
+        Search text
       </Typography>
-      <Slider
-        value={minRating}
-        min={0}
-        max={5}
-        step={0.1}
-        onChange={(_, value) => setMinRating(value)}
-        valueLabelDisplay="auto"
+      <TextField
+        label="Search"
+        value={queryInput}
+        onChange={(e) => setQueryInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            applyTextSearch();
+          }
+        }}
+        fullWidth
+        size="small"
+        sx={{ mt: 1, mb: 1 }}
       />
-      <Divider sx={{ my: 2 }} />
-      <FormControlLabel
-        control={<Switch checked={instantBook} onChange={(e) => setInstantBook(e.target.checked)} />}
-        label="Instant book only"
-      />
+      <Button variant="contained" fullWidth onClick={applyTextSearch}>
+        Search
+      </Button>
+      <Button variant="text" fullWidth onClick={handleResetFilters} sx={{ mt: 1 }}>
+        Reset filters
+      </Button>
     </Box>
   );
-
   return (
     <Box sx={commonStyles.contentContainer}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2, gap: 2, flexWrap: "wrap" }}>
+      <Box ref={listingsTopRef} display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2, gap: 2, flexWrap: "wrap" }}>
         <Box>
           <Typography variant="h4" sx={commonStyles.pageTitle}>
             Explore listings

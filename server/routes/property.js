@@ -131,6 +131,7 @@ router.get("/", async (req, res) => {
       category,
       type,
       ownerId,
+      facilities,
       minPrice,
       maxPrice,
       minRating,
@@ -147,6 +148,7 @@ router.get("/", async (req, res) => {
       category !== undefined ||
       type !== undefined ||
       ownerId !== undefined ||
+      facilities !== undefined ||
       minPrice !== undefined ||
       maxPrice !== undefined ||
       minRating !== undefined ||
@@ -160,6 +162,12 @@ router.get("/", async (req, res) => {
     const minPriceNum = minPrice !== undefined ? parseFloat(minPrice) : null;
     const maxPriceNum = maxPrice !== undefined ? parseFloat(maxPrice) : null;
     const minRatingNum = minRating !== undefined ? parseFloat(minRating) : null;
+    const facilityFilters = facilities
+      ? String(facilities)
+          .split(",")
+          .map((value) => sanitizeInput(value).trim())
+          .filter(Boolean)
+      : [];
 
     const normalizeSort = () => {
       if (sort === "price-low" || sort === "priceLow") return "priceLow";
@@ -192,6 +200,9 @@ router.get("/", async (req, res) => {
     if (category) baseQuery.category = category;
     if (type) baseQuery.type = type;
     if (ownerId) baseQuery.ownerHost = ownerId;
+    if (facilityFilters.length > 0) {
+      baseQuery.facilities = { $all: facilityFilters };
+    }
     if (Number.isFinite(minPriceNum) || Number.isFinite(maxPriceNum)) {
       baseQuery.pricePerNight = {};
       if (Number.isFinite(minPriceNum)) baseQuery.pricePerNight.$gte = minPriceNum;
