@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
 import { Box, Typography, Button, List, ListItem } from '@mui/material';
 import { formatPriceDisplay } from '../utils/api';
+import { MAP_COLORS } from '../utils/styleConstants';
 import L from 'leaflet';
 
 // Import Leaflet CSS - this ensures it's bundled correctly
@@ -39,8 +40,8 @@ function MapUpdater({ center }) {
 const createClusterIcon = (count) => {
   const html = `
     <div style="
-      background-color: #FF6B6B;
-      color: white;
+      background-color: ${MAP_COLORS.clusterBg};
+      color: ${MAP_COLORS.clusterText};
       border-radius: 50%;
       width: 40px;
       height: 40px;
@@ -130,8 +131,8 @@ export default function MapView({
         opacity: 1 !important;
       }
       .leaflet-container {
-        background: #ffffff !important;
-        color: #000000 !important;
+        background: ${MAP_COLORS.popupBg} !important;
+        color: ${MAP_COLORS.popupText} !important;
       }
       .leaflet-tile-pane {
         filter: none !important;
@@ -143,12 +144,12 @@ export default function MapView({
       }
       .leaflet-popup-content-wrapper,
       .leaflet-popup-tip {
-        background-color: #ffffff !important;
-        color: #000000 !important;
+        background-color: ${MAP_COLORS.popupBg} !important;
+        color: ${MAP_COLORS.popupText} !important;
         box-shadow: 0 3px 14px rgba(0,0,0,0.4) !important;
       }
       .leaflet-popup-content {
-        color: #000000 !important;
+        color: ${MAP_COLORS.popupText} !important;
       }
       .leaflet-popup-content p,
       .leaflet-popup-content div,
@@ -315,7 +316,7 @@ export default function MapView({
       >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         maxZoom={14}
       />
 
@@ -334,6 +335,7 @@ export default function MapView({
         }}
       />
 
+      {/* TODO UNDERSTAND AND FIX GROUP MARKERS */}
       {/* Render grouped markers */}
       {groupedMarkers && groupedMarkers.length > 0 ? (
         groupedMarkers.map((group, groupIdx) => {

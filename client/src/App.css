@@ -5,13 +5,18 @@
     font-family: 'Inter', 'Nunito', sans-serif;
 }
 
+:root {
+    --app-bg-light: #f8fafc;
+    --app-bg-dark: #0b1120;
+}
+
 body {
     transition: background-color 0.3s ease, color 0.3s ease;
-    background-color: #f8fafc;
+    background-color: var(--app-bg-light);
 }
 
 body[data-theme="dark"] {
-    background-color: #0b1120;
+    background-color: var(--app-bg-dark);
 }
 
 .leaflet-container {

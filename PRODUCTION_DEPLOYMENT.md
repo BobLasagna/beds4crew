@@ -8,6 +8,10 @@ Ensure these are set in your production environment:
 - [ ] `MONGO_URL` - MongoDB connection string
 - [ ] `JWT_SECRET` - Strong random string for access tokens
 - [ ] `JWT_REFRESH_SECRET` - Strong random string for refresh tokens
+- [ ] `AUTH_USE_HTTP_ONLY_COOKIES=true` - Enables cookie session mode
+- [ ] `AUTH_REQUIRE_CSRF=true` - Enforces CSRF on state-changing routes
+- [ ] `ADMIN_ALLOWLIST_EMAILS` - Comma-separated admin emails
+- [ ] `ADMIN_ALLOWLIST_IDS` - Comma-separated admin user IDs (optional)
 - [ ] `STRIPE_SECRET_KEY` - Stripe production secret key (starts with `sk_live_`)
 - [ ] `STRIPE_PRICE_TIER1` - Stripe Basic plan price ID (starts with `price_`)
 - [ ] `STRIPE_PRICE_TIER2` - Stripe Growth plan price ID (starts with `price_`)
@@ -166,11 +170,15 @@ Ensure these are set in your production environment:
 ## 🆘 Rollback Plan
 
 If issues occur:
-1. Switch Stripe back to test mode
-2. Restore previous environment variables
-3. Check webhook delivery logs in Stripe
-4. Review server logs for errors
-5. Use manual sync feature to fix inconsistent data
+1. Disable strict auth rollout flags temporarily:
+  - `AUTH_USE_HTTP_ONLY_COOKIES=false`
+  - `AUTH_REQUIRE_CSRF=false`
+2. Keep JWT secrets configured (`JWT_SECRET`, `JWT_REFRESH_SECRET`) during rollback
+3. Switch Stripe back to test mode if billing behavior is impacted
+4. Restore previous environment variables
+5. Check webhook delivery logs in Stripe
+6. Review server logs for errors
+7. Use manual sync feature to fix inconsistent data
 
 ## 📱 User Communication
 

@@ -29,6 +29,7 @@ import { LoadingState, NoTrips } from "../components/EmptyState";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { formatImageUrl } from "../utils/helpers";
 import { commonStyles } from "../utils/styleConstants";
+import { isArchivedBookingStatus, sortBookingThreads } from "../utils/bookingThreads";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
@@ -50,52 +51,16 @@ export default function TripListPage() {
   const [showConfirmed, setShowConfirmed] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
 
-  const isArchivedStatus = (status) => status === "cancelled" || status === "rejected";
-
-  const getLastMessageTimestamp = (booking) => {
-    const messageCount = booking.messages?.length || 0;
-    if (messageCount > 0) {
-      const timestamp = booking.messages[messageCount - 1]?.timestamp;
-      if (timestamp) return new Date(timestamp).getTime();
-    }
-    return dayjs.utc(booking.startDate).valueOf();
-  };
-
   const getFilteredBookings = () =>
     bookings.filter((booking) => {
       if (booking.status === "pending") return showPending;
       if (booking.status === "confirmed") return showConfirmed;
-      if (isArchivedStatus(booking.status)) return showArchived;
+      if (isArchivedBookingStatus(booking.status)) return showArchived;
       return true;
     });
 
   const getSortedBookings = (list) => {
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      let compareA;
-      let compareB;
-
-      switch (sortBy) {
-        case "property":
-          compareA = (a.property?.title || "").toLowerCase();
-          compareB = (b.property?.title || "").toLowerCase();
-          break;
-        case "date":
-          compareA = dayjs.utc(a.startDate).valueOf();
-          compareB = dayjs.utc(b.startDate).valueOf();
-          break;
-        case "newMessage":
-        default:
-          compareA = `${a.unreadByGuest ? "0" : "1"}-${String(9999999999999 - getLastMessageTimestamp(a)).padStart(13, "0")}`;
-          compareB = `${b.unreadByGuest ? "0" : "1"}-${String(9999999999999 - getLastMessageTimestamp(b)).padStart(13, "0")}`;
-          break;
-      }
-
-      if (compareA < compareB) return sortDirection === "asc" ? -1 : 1;
-      if (compareA > compareB) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
-    return sorted;
+    return sortBookingThreads(list, { sortBy, sortDirection, unreadKey: "unreadByGuest" });
   };
 
   useEffect(() => {
@@ -217,8 +182,7 @@ export default function TripListPage() {
     }
   };
 
-  const activeBookings = bookings.filter((bk) => bk.status === "pending" || bk.status === "confirmed");
-  const archivedBookings = bookings.filter((bk) => isArchivedStatus(bk.status));
+  const archivedBookings = bookings.filter((bk) => isArchivedBookingStatus(bk.status));
   const orderedThreads = getSortedBookings(getFilteredBookings());
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const showListPane = !isMobile || !showMobileConversation;
@@ -298,7 +262,7 @@ export default function TripListPage() {
               <List sx={{ height: { xs: "calc(100% - 185px)", md: 620 }, overflow: "auto", p: 0 }}>
                 {orderedThreads.map((bk, index) => {
                   const isSelected = selectedBookingId === bk._id;
-                  const isArchived = bk.status === "cancelled" || bk.status === "rejected";
+                  const isArchived = isArchivedBookingStatus(bk.status);
                   const threadDate = `${dayjs.utc(bk.startDate).format("M/D/YYYY")} – ${dayjs.utc(bk.endDate).format("M/D/YYYY")}`;
                   const photo = formatImageUrl(bk.property?.images?.[0]?.path || bk.property?.images?.[0] || "");
                   const lastMessageText = bk.messages?.length

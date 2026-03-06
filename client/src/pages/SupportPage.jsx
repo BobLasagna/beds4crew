@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Typography, Box, Button, Paper, Divider, Switch, FormControlLabel, FormGroup, Grid, Chip, Card, CardContent, Stack, Link, Collapse, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
 import EmailIcon from "@mui/icons-material/Email";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import SupportIcon from "@mui/icons-material/SupportAgent";
 import { useNavigate, useLocation, Link as RouterLink } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
@@ -10,6 +11,8 @@ import { SUPPORT_TOPIC_GROUPS, SUPPORT_TOPICS } from "../data/supportTopics";
 import supportFaqs from "../data/supportFaqs.json";
 import { hasChatFlow } from "../utils/chatFlowHelpers";
 
+
+// TODO FIX SCROLL ON TOPIC SELECT AND HASH CHANGE (ACCOUNT FOR STICKY HEADER)
 export default function SupportPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -403,7 +406,7 @@ export default function SupportPage() {
                                     component={RouterLink}
                                     to={topic.resourceLink.href}
                                     size="small"
-                                    variant="text"
+                                    variant="contained"
                                   >
                                     {topic.resourceLink.label}
                                   </Button>
@@ -418,6 +421,7 @@ export default function SupportPage() {
                                 onClick={() => openSupportChat({ slug: topic.slug, title: topic.title, source: "topic" })}
                               >
                                 Chat with Support
+                                <SupportIcon sx={{ ml: 0.5 }}/> 
                               </Button>
                             )}
                           </Stack>

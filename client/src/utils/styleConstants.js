@@ -51,6 +51,24 @@ export const BORDER_RADIUS = {
   large: 3,
 };
 
+export const CALENDAR_COLORS = {
+  free: "#4caf50",
+  partial: "#ffeb3b",
+  pending: "#2196f3",
+  blocked: "#ff9800",
+  booked: "#f44336",
+  past: "#e0e0e0",
+  mutedText: "#757575",
+  contrastText: "#000",
+};
+
+export const MAP_COLORS = {
+  clusterBg: "#FF6B6B",
+  clusterText: "#ffffff",
+  popupBg: "#ffffff",
+  popupText: "#000000",
+};
+
 // Common sx props for reuse
 export const commonStyles = {
   // Auth page container (Login, Register, Support)

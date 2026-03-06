@@ -1,5 +1,34 @@
 # Production-Ready Email System - Complete Implementation Summary
 
+## 2026-03 Security + Performance Refactor Addendum
+
+### Authentication and Session Model
+- Migrated to httpOnly cookie sessions with CSRF protection for state-changing API calls.
+- Canonical auth secrets are now `JWT_SECRET` + `JWT_REFRESH_SECRET`.
+- Rollout flags:
+   - `AUTH_USE_HTTP_ONLY_COOKIES=true`
+   - `AUTH_REQUIRE_CSRF=true`
+
+### Admin Authorization
+- Replaced hardcoded admin identity checks with environment allowlist policy:
+   - `ADMIN_ALLOWLIST_EMAILS` (comma-separated)
+   - `ADMIN_ALLOWLIST_IDS` (comma-separated)
+
+### API and Data Path Consolidation
+- Canonical wishlist API moved to user routes:
+   - `GET /api/users/wishlist`
+   - `GET /api/users/wishlist/summary`
+   - `POST /api/users/wishlist/:propertyId`
+   - `DELETE /api/users/wishlist/:propertyId`
+- Wishlist page now uses summary endpoint (removes client-side N+1 property requests).
+- Date finder query optimized with batched booking lookup (removed per-property booking query loop).
+
+### Rollback Switches
+- To temporarily roll back auth migration behavior:
+   - Set `AUTH_USE_HTTP_ONLY_COOKIES=false`
+   - Set `AUTH_REQUIRE_CSRF=false`
+- Keep `JWT_SECRET` and `JWT_REFRESH_SECRET` set in all environments before toggling.
+
 ## ✅ All Changes Implemented
 
 ### 1. Email Notification Preferences ✓

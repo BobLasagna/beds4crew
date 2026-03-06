@@ -3,6 +3,15 @@
 ## Overview
 The email service is now integrated into Beds4Crew for user authentication and booking notifications.
 
+## Security Prerequisites (Current App Contract)
+- Auth/session uses secure cookie mode with CSRF protection.
+- Ensure backend environment includes:
+  - `JWT_SECRET`
+  - `JWT_REFRESH_SECRET`
+  - `AUTH_USE_HTTP_ONLY_COOKIES=true`
+  - `AUTH_REQUIRE_CSRF=true`
+- Client requests should include credentials and CSRF headers via shared API helpers (`client/src/utils/api.js`).
+
 ## Features
 - ✅ Welcome emails on registration
 - ✅ Email verification (template ready) 
