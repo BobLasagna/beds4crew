@@ -20,7 +20,7 @@ import {
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, API_URL } from "../utils/api";
+import { fetchWithAuth, fetchJson, getStoredUser, setStoredUser, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { getListingMetrics } from "../utils/helpers";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -28,7 +28,7 @@ import PropertyCard from "../components/PropertyCard";
 
 export default function ProfilePage() {
   const navigate = useNavigate();  const location = useLocation();
-  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const storedUser = getStoredUser();
   const listingsTabRef = useRef(null);
   const [tab, setTab] = useState(0);
   const [listings, setListings] = useState([]);
@@ -74,8 +74,7 @@ export default function ProfilePage() {
       return;
     }
 
-    fetch(`${API_URL}/properties?page=1&limit=50&ownerId=${encodeURIComponent(storedUser.id)}`)
-      .then((res) => res.json())
+    fetchJson(`${API_URL}/properties?page=1&limit=50&ownerId=${encodeURIComponent(storedUser.id)}`)
       .then((data) => {
         const items = Array.isArray(data?.items)
           ? data.items
@@ -111,7 +110,7 @@ export default function ProfilePage() {
           ...data,
           id: data._id || data.id || storedUser.id,
         };
-        localStorage.setItem("user", JSON.stringify(updatedUser));
+        setStoredUser(updatedUser);
         setSubscriptionInfo({
           status: data.subscriptionStatus || "",
           currentPeriodEnd: data.subscriptionCurrentPeriodEnd || null,
@@ -138,7 +137,7 @@ export default function ProfilePage() {
             ...userData,
             id: userData._id || userData.id || storedUser.id,
           };
-          localStorage.setItem("user", JSON.stringify(updatedUser));
+          setStoredUser(updatedUser);
           setSubscriptionInfo({
             status: userData.subscriptionStatus || "",
             currentPeriodEnd: userData.subscriptionCurrentPeriodEnd || null,
@@ -221,9 +220,9 @@ export default function ProfilePage() {
         return;
       }
       const data = await res.json();
-      localStorage.setItem("user", JSON.stringify(data));
+      setStoredUser(data);
       snackbar("Profile updated successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to update profile", "error");
     }
   };
@@ -261,10 +260,10 @@ export default function ProfilePage() {
       
       // Update localStorage
       const updatedUser = { ...storedUser, profileImagePath: data.profileImagePath };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setStoredUser(updatedUser);
       
       snackbar("Profile photo updated successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to upload photo", "error");
     } finally {
       setUploading(false);
@@ -287,10 +286,10 @@ export default function ProfilePage() {
       
       // Update localStorage
       const updatedUser = { ...storedUser, profileImagePath: "" };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setStoredUser(updatedUser);
       
       snackbar("Profile photo removed successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to remove photo", "error");
     } finally {
       setDeleting(false);
@@ -398,7 +397,7 @@ export default function ProfilePage() {
             ...userData,
             id: userData._id || userData.id || storedUser.id,
           };
-          localStorage.setItem("user", JSON.stringify(updatedUser));
+          setStoredUser(updatedUser);
           setSubscriptionInfo({
             status: userData.subscriptionStatus || "",
             currentPeriodEnd: userData.subscriptionCurrentPeriodEnd || null,

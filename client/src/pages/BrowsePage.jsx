@@ -22,7 +22,7 @@ import { commonStyles } from "../utils/styleConstants";
 import MapView from '../components/HotelMapView';
 import PropertyCard from '../components/PropertyCard';
 import { useSnackbar } from '../components/AppSnackbar';
-import { fetchWithAuth, API_URL } from '../utils/api';
+import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, API_URL } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 //TODO: Move to config file or generate based off existing data
@@ -52,12 +52,9 @@ export default function BrowsePage() {
   const [loading, setLoading] = useState(true);
   const [wishlist, setWishlist] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showCustomSearch, setShowCustomSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('recommended');
   const [showMap, setShowMap] = useState(true);
-  const [showControls, setShowControls] = useState(true);
+  const [showControls] = useState(true);
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [gridColumns, setGridColumns] = useState(3);
   const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
@@ -71,16 +68,15 @@ export default function BrowsePage() {
   const snackbar = useSnackbar();
   const gridOptions = [5, 3, 2, 1];
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = getStoredUser();
   const mapSectionRef = useRef(null);
   const resultsListRef = useRef(null);
 
   // Fetch user's wishlist
   useEffect(() => {
     if (!user?.id) return;
-    fetchWithAuth(`${API_URL}/auth/me`)
-      .then(res => res.json())
-      .then(data => setWishlist(data.wishList || []))
+    fetchJsonWithAuth(`${API_URL}/users/wishlist`)
+      .then(data => setWishlist((data || []).map((property) => property?._id).filter(Boolean)))
       .catch(err => console.error('Failed to fetch wishlist:', err));
   }, [user.id]);
 
@@ -208,12 +204,7 @@ export default function BrowsePage() {
         radius: String(radius),
       });
 
-      const res = await fetch(`${API_URL}/properties?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Failed to load properties');
-      }
+      const data = await fetchJson(`${API_URL}/properties?${params.toString()}`);
 
       const items = Array.isArray(data.items)
         ? data.items
@@ -260,12 +251,7 @@ export default function BrowsePage() {
         sort: sortBy,
       });
 
-      const res = await fetch(`${API_URL}/properties/date-finder?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Search failed');
-      }
+      const data = await fetchJson(`${API_URL}/properties/date-finder?${params.toString()}`);
 
       const items = Array.isArray(data.properties) ? data.properties : [];
       const pagination = data.pagination || {
@@ -356,38 +342,6 @@ export default function BrowsePage() {
     />
   );
 
-  const handleLocationChange = (e) => {
-    const selected = POPULAR_LOCATIONS.find(l => l.label === e.target.value);
-    if (selected) {
-      setCenter({ lat: selected.lat, lng: selected.lng });
-      setCurrentPage(1);
-    }
-  };
-
-  const handleCustomLocationSearch = async () => {
-    if (!searchQuery.trim()) {
-      snackbar('Please enter a location to search', 'warning');
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/geocoding/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      if (!data.lat || !data.lon) {
-        snackbar('No results found for that location', 'error');
-        return;
-      }
-      setCenter({ lat: parseFloat(data.lat), lng: parseFloat(data.lon) });
-      setCurrentPage(1);
-      snackbar('Location updated successfully', 'success');
-    } catch (err) {
-      console.error('Error searching location:', err);
-      snackbar('Error searching for location', 'error');
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
   // Debounced location search for autocomplete
   useEffect(() => {
     if (!locationInput || locationInput.length < 3) {
@@ -398,8 +352,7 @@ export default function BrowsePage() {
     const timer = setTimeout(async () => {
       setGeocoding(true);
       try {
-        const res = await fetch(`${API_URL}/geocoding/search?q=${encodeURIComponent(locationInput)}`);
-        const data = await res.json();
+        const data = await fetchJson(`${API_URL}/geocoding/search?q=${encodeURIComponent(locationInput)}`);
         if (data.lat && data.lon) {
           setLocationOptions([{
             label: data.display_name || locationInput,
@@ -466,8 +419,6 @@ export default function BrowsePage() {
   const handleResetFilters = () => {
     setCenter(DEFAULT_LOCATION);
     setRadius(DEFAULT_RADIUS_MILES);
-    setSearchQuery('');
-    setShowCustomSearch(false);
     setSortBy('recommended');
     setCurrentPage(1);
     setStartDate(null);
@@ -487,10 +438,7 @@ export default function BrowsePage() {
     const method = inWishlist ? 'DELETE' : 'POST';
 
     try {
-      const res = await fetchWithAuth(
-        `${API_URL}/properties/${propertyId}/wishlist`,
-        { method }
-      );
+      const res = await fetchWithAuth(`${API_URL}/users/wishlist/${propertyId}`, { method });
       if (res.ok) {
         setWishlist(prev => {
           if (inWishlist) {
@@ -502,7 +450,7 @@ export default function BrowsePage() {
           }
         });
       }
-    } catch (err) {
+    } catch {
       snackbar('Failed to update wishlist', 'error');
     }
   };
@@ -589,6 +537,7 @@ export default function BrowsePage() {
             </Button>
           </Box>
 
+          {/* TODO REPAIR LOCATION SEARCH BY ZIP OR CITY */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
             {/* Location Search with Autocomplete */}
             <Autocomplete

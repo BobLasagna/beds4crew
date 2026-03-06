@@ -2,6 +2,7 @@ const express = require("express");
 const User = require("../models/User");
 const Property = require("../models/Property");
 const verifyToken = require("../middleware/auth");
+const cache = require("../utils/cache");
 const router = express.Router();
 
 // Toggle user role between guest and host
@@ -102,6 +103,50 @@ router.post("/wishlist/:propertyId", verifyToken, async (req, res) => {
 router.get("/wishlist", verifyToken, async (req, res) => {
   const user = await User.findById(req.user.id).populate("wishList");
   res.json(user.wishList);
+});
+
+// Get lightweight wishlist summary for list rendering
+router.get("/wishlist/summary", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .populate({
+        path: "wishList",
+        select: "title city country category type images pricePerNight rooms rating ownerHost createdAt",
+        populate: {
+          path: "ownerHost",
+          select: "firstName lastName profileImagePath hasPaid",
+        },
+      })
+      .lean();
+
+    return res.json(user?.wishList || []);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch wishlist summary" });
+  }
+});
+
+// Add to wishlist (canonical)
+router.post("/wishlist/:propertyId", verifyToken, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    await User.findByIdAndUpdate(req.user.id, { $addToSet: { wishList: propertyId } });
+    cache.delete(`property:${propertyId}`);
+    return res.json({ message: "Added to wishlist" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to add to wishlist" });
+  }
+});
+
+// Remove from wishlist (canonical)
+router.delete("/wishlist/:propertyId", verifyToken, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    await User.findByIdAndUpdate(req.user.id, { $pull: { wishList: propertyId } });
+    cache.delete(`property:${propertyId}`);
+    return res.json({ message: "Removed from wishlist" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to remove from wishlist" });
+  }
 });
 
 // Get subscription status

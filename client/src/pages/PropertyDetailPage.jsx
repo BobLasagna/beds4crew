@@ -4,7 +4,7 @@ import { Box, Typography, Card, Button, TextField, Dialog, DialogTitle, DialogCo
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, formatPriceDisplay, API_URL } from "../utils/api";
+import { fetchJson, fetchWithAuth, formatPriceDisplay, getStoredUser, API_URL } from "../utils/api";
 import { LoadingState } from "../components/EmptyState";
 import RoomBedsConfigurator from "../components/RoomBedsConfigurator";
 import PhotoTile from "../components/PhotoTile";
@@ -42,7 +42,7 @@ export default function PropertyDetailPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
-  const [blockedPeriods, setBlockedPeriods] = useState([]);
+  const [blockedPeriods] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
   const [endDate, setEndDate] = useState(null);
@@ -78,31 +78,31 @@ export default function PropertyDetailPage() {
   })();
   const previousRouteLabel = getBreadcrumbLabel(previousRoute);
 
+  const loadPropertyData = useCallback(async () => {
+    const [propertyData, bookingData] = await Promise.all([
+      fetchJson(`${API_URL}/properties/${id}`),
+      fetchJson(`${API_URL}/bookings/property/${id}`),
+    ]);
+
+    setProperty(propertyData);
+    setEditForm(propertyData);
+
+    const confirmedBookings = bookingData.filter((booking) => booking.status === "confirmed");
+    const pendingBookingsList = bookingData.filter((booking) => booking.status === "pending");
+    setBookings(confirmedBookings);
+    setPendingBookings(pendingBookingsList);
+  }, [id]);
+
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    setCurrentUser(user);
+    setCurrentUser(getStoredUser());
   }, []);
 
   useEffect(() => {
-    fetch(`${API_URL}/properties/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        setProperty(data);
-        setEditForm(data);
-      });
-    
-    // Fetch bookings for this property
-    fetch(`${API_URL}/bookings/property/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        // Separate confirmed and pending bookings
-        const confirmedBookings = data.filter(b => b.status === "confirmed");
-        const pendingBookingsList = data.filter(b => b.status === "pending");
-        setBookings(confirmedBookings);
-        setPendingBookings(pendingBookingsList);
-      })
-      .catch(err => console.error("Failed to fetch bookings:", err));
-  }, [id]);
+    loadPropertyData().catch((error) => {
+      console.error("Failed to fetch property data:", error);
+      snackbar("Failed to load property details", "error");
+    });
+  }, [loadPropertyData, snackbar]);
 
   useEffect(() => {
     if (currentUser && property) {
@@ -122,7 +122,7 @@ export default function PropertyDetailPage() {
 
   useEffect(() => {
     if (isOwner && searchParams.get("edit") === "true") {
-      setEditDialogOpen(true);
+      setIsEditing(true);
     }
   }, [isOwner, searchParams]);
 
@@ -248,7 +248,7 @@ export default function PropertyDetailPage() {
       const updated = data;
       setProperty(updated);
       snackbar(`Property ${updated.status === "active" ? "activated" : "disabled"} successfully`);
-      window.location.reload();
+      await loadPropertyData();
     } catch (err) {
       snackbar(err.message || "Failed to update property", "error");
     } finally {
@@ -291,16 +291,13 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to update caption");
       setProperty(await res.json());
       snackbar("Caption updated successfully");
-      // Reload page to ensure fresh data
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-    } catch (err) {
+      await loadPropertyData();
+    } catch {
       snackbar("Failed to update caption", "error");
     } finally {
       setCaptionLoading(prev => ({ ...prev, [idx]: false }));
     }
-  }, [id, snackbar]);
+  }, [id, loadPropertyData, snackbar]);
 
   const handleImageDelete = useCallback(async (idx) => {
     try {
@@ -309,7 +306,7 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to delete image");
       setProperty(await res.json());
       snackbar("Image deleted successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to delete image", "error");
     } finally {
       setDeleteLoading(prev => ({ ...prev, [idx]: false }));
@@ -330,9 +327,9 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to upload images");
       setProperty(await res.json());
       e.target.value = "";
-      window.location.reload();
+      await loadPropertyData();
       snackbar("Photos uploaded successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to upload photos", "error");
     } finally {
       setUploadLoading(false);
@@ -348,7 +345,7 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to delete property");
       snackbar("Property deleted successfully");
       navigate("/");
-    } catch (err) {
+    } catch {
       snackbar("Failed to delete property", "error");
     } finally {
       setDeletePropertyLoading(false);

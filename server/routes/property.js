@@ -2,6 +2,7 @@ const User = require("../models/User");
 const express = require("express");
 const Property = require("../models/Property");
 const verifyToken = require("../middleware/auth");
+const { verifyAdmin } = require("../middleware/auth");
 const cache = require("../utils/cache");
 const { geocodeAddress } = require("../utils/geocoding");
 const { uploadMultiple } = require("../utils/fileUpload");
@@ -406,6 +407,24 @@ router.get("/date-finder", async (req, res) => {
     
     // Check availability for each property
     const Booking = require("../models/Booking");
+    const propertyIds = propertiesInRadius.map((property) => property._id);
+    const overlappingBookings = await Booking.find({
+      property: { $in: propertyIds },
+      status: "confirmed",
+      startDate: { $lte: end },
+      endDate: { $gte: start },
+    })
+      .select("property bookedBeds")
+      .lean();
+
+    const bookingsByProperty = new Map();
+    overlappingBookings.forEach((booking) => {
+      const propertyKey = String(booking.property);
+      const current = bookingsByProperty.get(propertyKey) || [];
+      current.push(booking);
+      bookingsByProperty.set(propertyKey, current);
+    });
+
     const availableProperties = [];
     
     for (const property of propertiesInRadius) {
@@ -417,13 +436,7 @@ router.get("/date-finder", async (req, res) => {
         continue;
       }
       
-      // Get all confirmed bookings that overlap with the date range
-      const overlappingBookings = await Booking.find({
-        property: property._id,
-        status: "confirmed",
-        startDate: { $lte: end },
-        endDate: { $gte: start }
-      }).lean();
+      const propertyBookings = bookingsByProperty.get(String(property._id)) || [];
       
       // console.log(`  📅 ${overlappingBookings.length} overlapping bookings`);
       
@@ -471,7 +484,7 @@ router.get("/date-finder", async (req, res) => {
           }
           
           // Check if bed is booked
-          const bedBooked = overlappingBookings.some(booking => {
+          const bedBooked = propertyBookings.some(booking => {
             return booking.bookedBeds?.some(bookedBed => 
               bookedBed.roomIndex === roomIndex && bookedBed.bedIndex === bedIndex
             );
@@ -547,7 +560,7 @@ router.get("/date-finder", async (req, res) => {
     });
   } catch (error) {
     console.error('Date finder error:', error);
-    res.status(500).json({ message: "Failed to search properties", error: error.message });
+    res.status(500).json({ message: "Failed to search properties" });
   }
 });
 
@@ -798,7 +811,7 @@ router.post("/:id/images", verifyToken, uploadMultiple, async (req, res) => {
 });
 
 // Clear all property caches (admin/debug endpoint)
-router.post("/admin/clear-cache", async (req, res) => {
+router.post("/admin/clear-cache", verifyToken, verifyAdmin, async (req, res) => {
   try {
     cache.clear();
     res.json({ message: "All caches cleared successfully" });

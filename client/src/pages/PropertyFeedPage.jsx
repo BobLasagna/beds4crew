@@ -25,7 +25,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
 import { NoPropertiesFound } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, API_URL } from "../utils/api";
+import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 
 const RESULTS_PER_PAGE = 12;
@@ -49,7 +49,7 @@ export default function PropertyFeedPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [priceInitialized, setPriceInitialized] = useState(false);
   const [gridColumns, setGridColumns] = useState(3);
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = getStoredUser();
   const location = useLocation();
   const snackbar = useSnackbar();
   const gridOptions = [5, 3, 2, 1];
@@ -57,9 +57,8 @@ export default function PropertyFeedPage() {
   // Fetch user's wishlist on mount and when navigating to this page
   useEffect(() => {
     if (!user?.id) return;
-    fetchWithAuth(`${API_URL}/auth/me`)
-        .then(res => res.json())
-        .then(data => setWishlist(data.wishList || []))
+    fetchJsonWithAuth(`${API_URL}/users/wishlist`)
+      .then((data) => setWishlist((data || []).map((property) => property?._id).filter(Boolean)))
         .catch(() => {});
   }, [user.id, location.pathname]);
 
@@ -70,7 +69,7 @@ export default function PropertyFeedPage() {
     }
     const inWishlist = wishlist.includes(propertyId);
     const method = inWishlist ? "DELETE" : "POST";
-    const res = await fetchWithAuth(`${API_URL}/properties/${propertyId}/wishlist`, {
+    const res = await fetchWithAuth(`${API_URL}/users/wishlist/${propertyId}`, {
       method: method
     });
     if (res.ok) {
@@ -107,12 +106,7 @@ export default function PropertyFeedPage() {
         instantBook: instantBook ? "true" : "false",
       });
 
-      const res = await fetch(`${API_URL}/properties?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || "Failed to load properties");
-      }
+      const data = await fetchJson(`${API_URL}/properties?${params.toString()}`);
 
       const items = Array.isArray(data.items)
         ? data.items

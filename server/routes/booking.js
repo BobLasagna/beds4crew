@@ -8,6 +8,13 @@ const emailService = require("../utils/emailService");
 
 const router = express.Router();
 
+const parsePagination = (req) => {
+  const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+  return { hasPagination, page, limit, skip: (page - 1) * limit };
+};
+
 // Create a new booking (guest only) - starts as "pending"
 router.post("/", verifyToken, async (req, res) => {
   try {
@@ -139,11 +146,32 @@ router.post("/", verifyToken, async (req, res) => {
 // Get all bookings for the user (guest's trip list)
 router.get("/guest", verifyToken, async (req, res) => {
   try {
-    const bookings = await Booking.find({ guest: req.user.id })
-      .populate("property host")
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Booking.find({ guest: req.user.id })
+      .populate("property", "title city country images status")
+      .populate("host", "firstName lastName email profileImagePath")
       .sort("-createdAt")
       .lean();
-    res.json(bookings);
+
+    if (!hasPagination) {
+      const bookings = await query;
+      return res.json(bookings);
+    }
+
+    const [bookings, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Booking.countDocuments({ guest: req.user.id }),
+    ]);
+
+    return res.json({
+      items: bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
   }
@@ -152,11 +180,32 @@ router.get("/guest", verifyToken, async (req, res) => {
 // Get all bookings for host's properties (host-only)
 router.get("/host", verifyToken, async (req, res) => {
   try {
-    const bookings = await Booking.find({ host: req.user.id })
-      .populate("property guest")
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Booking.find({ host: req.user.id })
+      .populate("property", "title city country images status")
+      .populate("guest", "firstName lastName email profileImagePath")
       .sort("-createdAt")
       .lean();
-    res.json(bookings);
+
+    if (!hasPagination) {
+      const bookings = await query;
+      return res.json(bookings);
+    }
+
+    const [bookings, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Booking.countDocuments({ host: req.user.id }),
+    ]);
+
+    return res.json({
+      items: bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
   }

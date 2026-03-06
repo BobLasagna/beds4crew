@@ -4,9 +4,12 @@ import { useLocation } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
 import { LoadingState, NoWishlist } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, API_URL } from "../utils/api";
+import { fetchJsonWithAuth, fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 
+
+// TODO ADD WISHLIST FUNCTION TO PROPERTY CARD
+// TODO ADD WISHLIST TAB TO PROFILE PAGE
 export default function WishListPage() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,18 +20,8 @@ export default function WishListPage() {
     async function fetchWishlist() {
       setLoading(true);
       try {
-        const userRes = await fetchWithAuth(`${API_URL}/auth/me`);
-        const user = await userRes.json();
-        if (!user.wishList?.length) {
-          setProperties([]);
-          return;
-        }
-        const props = await Promise.all(
-          user.wishList.map(pid =>
-            fetch(`${API_URL}/properties/${pid}`).then(r => r.json())
-          )
-        );
-        setProperties(props.filter(Boolean));
+        const summary = await fetchJsonWithAuth(`${API_URL}/users/wishlist/summary`);
+        setProperties(Array.isArray(summary) ? summary : []);
       } finally {
         setLoading(false);
       }
@@ -37,7 +30,7 @@ export default function WishListPage() {
   }, [location.pathname]);
 
   const handleRemove = async (propId) => {
-    const res = await fetchWithAuth(`${API_URL}/properties/${propId}/wishlist`, {
+    const res = await fetchWithAuth(`${API_URL}/users/wishlist/${propId}`, {
       method: "DELETE"
     });
     if (res.ok) {
