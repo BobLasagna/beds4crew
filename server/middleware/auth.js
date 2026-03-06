@@ -9,16 +9,16 @@ const parseEnvList = (value = "") =>
 
 const isAllowlistedAdmin = (user = {}) => {
   const allowlistedIds = parseEnvList(process.env.ADMIN_ALLOWLIST_IDS || process.env.BEDS4CREW_ADMIN_ID || "");
-  const allowlistedEmails = parseEnvList(
-    process.env.ADMIN_ALLOWLIST_EMAILS || process.env.BEDS4CREW_ADMIN_EMAIL || ""
-  );
+  // const allowlistedEmails = parseEnvList(
+  //   process.env.ADMIN_ALLOWLIST_EMAILS || process.env.BEDS4CREW_ADMIN_EMAIL || ""
+  // );
 
   const userId = (user.id || user._id || "").toString().toLowerCase();
   const userEmail = (user.email || "").toString().toLowerCase();
 
   return (
-    (allowlistedIds.length > 0 && allowlistedIds.includes(userId)) ||
-    (allowlistedEmails.length > 0 && allowlistedEmails.includes(userEmail))
+    (allowlistedIds.length > 0 && allowlistedIds.includes(userId))
+    // (allowlistedEmails.length > 0 && allowlistedEmails.includes(userEmail))
   );
 };
 
