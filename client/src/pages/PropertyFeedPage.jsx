@@ -26,7 +26,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
 import { NoPropertiesFound } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, API_URL } from "../utils/api";
+import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, isAppTransportMode, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 
@@ -34,6 +34,8 @@ const RESULTS_PER_PAGE = 12;
 const MAX_PRICE = 500;
 
 export default function PropertyFeedPage() {
+  const isNativeApp = isAppTransportMode();
+  const defaultGridColumns = isNativeApp ? 1 : 3;
   const [properties, setProperties] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +58,7 @@ export default function PropertyFeedPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [gridColumns, setGridColumns] = useState(3);
+  const [gridColumns, setGridColumns] = useState(defaultGridColumns);
   const listingsTopRef = useRef(null);
   const user = getStoredUser();
   const location = useLocation();
@@ -184,6 +186,12 @@ export default function PropertyFeedPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [query, category, type, appliedPriceRange, appliedMinRating, appliedFacilities, sortBy]);
+
+  useEffect(() => {
+    if (isNativeApp && gridColumns !== 1) {
+      setGridColumns(1);
+    }
+  }, [isNativeApp, gridColumns]);
 
   const visibleListings = useMemo(() => properties, [properties]);
 
@@ -380,25 +388,27 @@ export default function PropertyFeedPage() {
                 <MenuItem value="priceHigh">Price: high to low</MenuItem>
               </Select>
             </FormControl>
-            <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body2" color="text.secondary">
-                Results per row
-              </Typography>
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={gridColumns}
-                onChange={(_, value) => {
-                  if (value) setGridColumns(value);
-                }}
-              >
-                {gridOptions.map((option) => (
-                  <ToggleButton key={option} value={option}>
-                    {option}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Box>
+            {!isNativeApp && (
+              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                <Typography variant="body2" color="text.secondary">
+                  Results per row
+                </Typography>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={gridColumns}
+                  onChange={(_, value) => {
+                    if (value) setGridColumns(value);
+                  }}
+                >
+                  {gridOptions.map((option) => (
+                    <ToggleButton key={option} value={option}>
+                      {option}
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+              </Box>
+            )}
           </Box>
 
           {loading ? (

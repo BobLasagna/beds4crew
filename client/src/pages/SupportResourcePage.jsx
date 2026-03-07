@@ -6,13 +6,14 @@ import { SUPPORT_INTERNAL_LINKS, SUPPORT_TOPICS } from "../data/supportTopics";
 import { SUPPORT_RESOURCE_CONTENT } from "../data/supportResourceContent";
 import { hasChatFlow } from "../utils/chatFlowHelpers";
 import SupportTicketDialog from "../components/SupportTicketDialog";
-import { API_URL } from "../utils/api";
+import { API_URL, isAppTransportMode } from "../utils/api";
 import { useThemeMode } from "../contexts/ThemeContext";
 import { useSnackbar } from "../components/AppSnackbar";
 
 export default function SupportResourcePage() {
   const location = useLocation();
   const { reEnableCookieNotice } = useThemeMode();
+  const isNativeApp = isAppTransportMode();
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketSubject, setTicketSubject] = useState("");
   const [cookiePolicy, setCookiePolicy] = useState(null);
@@ -277,7 +278,7 @@ export default function SupportResourcePage() {
           </Card>
         )}
 
-        {resource?.slug === "cookie-policy" && (
+        {resource?.slug === "cookie-policy" && !isNativeApp && (
           <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
             <CardContent>
               <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>

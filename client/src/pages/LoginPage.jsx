@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { TextField, Button, Typography, Box, Paper } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
-import { setTokens, API_URL } from "../utils/api";
+import { setTokens, isAppTransportMode, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 
 export default function LoginPage() {
@@ -21,16 +21,31 @@ export default function LoginPage() {
     setError("");
 
     try {
+      const appMode = isAppTransportMode();
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        credentials: appMode ? "omit" : "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(appMode ? { "X-Auth-Mode": "app" } : {}),
+        },
+        body: JSON.stringify({
+          ...form,
+          ...(appMode ? { authMode: "app" } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Login failed");
 
-      setTokens(null, null, data?.csrfToken);
+      if (appMode && (!data?.accessToken || !data?.refreshToken)) {
+        throw new Error("Login succeeded but app tokens were not returned");
+      }
+
+      setTokens(
+        appMode ? data?.accessToken : null,
+        appMode ? data?.refreshToken : null,
+        data?.csrfToken,
+      );
       localStorage.setItem("user", JSON.stringify(data.user));
 
       snackbar("Login successful");

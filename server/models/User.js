@@ -71,6 +71,33 @@ const UserSchema = new mongoose.Schema(
       newMessage: { type: Boolean, default: true },
       welcomeEmail: { type: Boolean, default: true }
       // Note: Password reset and email verification are always sent
+    },
+
+    // App + in-app notification preferences (kept separate from email preferences)
+    notificationPreferences: {
+      inAppEnabled: { type: Boolean, default: true },
+      pushEnabled: { type: Boolean, default: true },
+      bookingConfirmation: { type: Boolean, default: true },
+      bookingCancellation: { type: Boolean, default: true },
+      newBookingRequest: { type: Boolean, default: true },
+      newMessage: { type: Boolean, default: true },
+      marketingUpdates: { type: Boolean, default: true }
+    },
+
+    // App push tokens bound to user devices
+    pushTokens: {
+      type: [
+        {
+          token: { type: String, required: true },
+          platform: { type: String, enum: ["ios", "android", "web"], required: true },
+          provider: { type: String, enum: ["fcm", "apns", "expo", "unknown"], default: "unknown" },
+          deviceId: { type: String, default: "" },
+          appVersion: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now },
+          lastSeenAt: { type: Date, default: Date.now }
+        }
+      ],
+      default: []
     }
   },
   { timestamps: true }

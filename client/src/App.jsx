@@ -10,7 +10,7 @@ import { SnackbarProvider } from "./components/AppSnackbar";
 import NavigationDrawer from "./components/NavigationDrawer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
-import { clearTokens, fetchJsonWithAuth, getStoredUser, setStoredUser, API_URL } from "./utils/api";
+import { clearTokens, fetchJsonWithAuth, getStoredUser, isAppTransportMode, setStoredUser, API_URL } from "./utils/api";
 import { SUPPORT_INTERNAL_PATHS } from "./data/supportTopics";
 import { useThemeMode } from "./contexts/ThemeContext";
 
@@ -79,11 +79,17 @@ const RouteChangeEffects = () => {
 };
 
 function App() {
-  const { cookieNoticeDismissed, dismissCookieNotice, reEnableCookieNotice } = useThemeMode();
+  const { cookieNoticeDismissed, dismissCookieNotice } = useThemeMode();
+  const isNativeApp = isAppTransportMode();
   const [showCookieNotice, setShowCookieNotice] = useState(false);
   const [consentStatus, setConsentStatus] = useState(null);
 
   useEffect(() => {
+    if (isNativeApp) {
+      setConsentStatus(null);
+      return;
+    }
+
     fetch(`${API_URL}/analytics/consent/status`, {
       credentials: "include",
     })
@@ -99,7 +105,7 @@ function App() {
       .catch(() => {
         setConsentStatus(null);
       });
-  }, []);
+  }, [isNativeApp]);
 
   useEffect(() => {
     const showCookieNoticeEnabled = import.meta.env.VITE_SHOW_COOKIE_NOTICE !== 'false';
@@ -108,11 +114,12 @@ function App() {
     const requiresOptIn = Boolean(consentStatus?.requiredOptIn);
     const forcePrompt = requiresOptIn && !hasConsentDecision;
 
-    const shouldShowNotice = showCookieNoticeEnabled
+    const shouldShowNotice = !isNativeApp
+      && showCookieNoticeEnabled
       && (forcePrompt || !cookieNoticeDismissed);
 
     setShowCookieNotice(shouldShowNotice);
-  }, [cookieNoticeDismissed, consentStatus]);
+  }, [cookieNoticeDismissed, consentStatus, isNativeApp]);
 
   useEffect(() => {
     // On app load, refresh user data from server to sync localStorage/session
@@ -166,7 +173,7 @@ function App() {
         const data = await refreshed.json();
         setConsentStatus(data);
       }
-    } catch (error) {
+    } catch {
       // no-op: banner remains visible if consent update fails
     }
   };

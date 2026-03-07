@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { ACCESS_COOKIE_NAME, getJwtSecrets } = require("../utils/tokenHelpers");
+const { ACCESS_COOKIE_NAME, parseBearerToken, getJwtSecrets } = require("../utils/tokenHelpers");
 
 const parseEnvList = (value = "") =>
   value
@@ -23,19 +23,29 @@ const isAllowlistedAdmin = (user = {}) => {
 };
 
 const verifyToken = (req, res, next) => {
-  const authHeaderToken = req.headers["authorization"]?.split(" ")[1];
+  const authHeaderToken = parseBearerToken(req.headers["authorization"]);
   const cookieToken = req.cookies?.[ACCESS_COOKIE_NAME];
-  const token = cookieToken || authHeaderToken;
-  if (!token) return res.status(401).json({ message: "No token provided" });
+  const tokenCandidates = [
+    { token: authHeaderToken, source: "authorization" },
+    { token: cookieToken, source: "cookie" },
+  ].filter((entry) => Boolean(entry.token));
 
-  try {
-    const { accessSecret } = getJwtSecrets();
-    const decoded = jwt.verify(token, accessSecret);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: "Token invalid/expired" });
+  if (tokenCandidates.length === 0) {
+    return res.status(401).json({ message: "No token provided" });
   }
+
+  const { accessSecret } = getJwtSecrets();
+  for (const candidate of tokenCandidates) {
+    try {
+      const decoded = jwt.verify(candidate.token, accessSecret);
+      req.user = decoded;
+      req.authTokenSource = candidate.source;
+      return next();
+    } catch (error) {
+    }
+  }
+
+  return res.status(401).json({ message: "Token invalid/expired" });
 };
 
 const verifyAdmin = (req, res, next) => {

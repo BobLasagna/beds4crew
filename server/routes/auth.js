@@ -12,7 +12,8 @@ const {
   generateCsrfToken,
   setCsrfCookie,
   clearCsrfCookie,
-  REFRESH_COOKIE_NAME,
+  isAppAuthModeRequest,
+  getRefreshTokenFromRequest,
   getJwtSecrets,
 } = require("../utils/tokenHelpers");
 const { validateEmail, validatePassword, sanitizeInput } = require("../utils/validation");
@@ -115,6 +116,7 @@ router.post("/register", uploadSingle, async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    const isAppAuthRequest = isAppAuthModeRequest(req);
 
     // Validate fields
     if (!email || !password) {
@@ -168,6 +170,7 @@ router.post("/login", async (req, res) => {
     // Return user info (+ csrf token for client header contract)
     return res.json({
       csrfToken,
+      ...(isAppAuthRequest ? { accessToken, refreshToken } : {}),
       user: {
         id: user._id,
         email: user.email,
@@ -192,8 +195,10 @@ router.post("/login", async (req, res) => {
 // Refresh token endpoint
 router.post("/refresh", async (req, res) => {
   try {
-    const { refreshToken: bodyRefreshToken } = req.body || {};
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || bodyRefreshToken;
+    const isAppAuthRequest = isAppAuthModeRequest(req);
+    const refreshToken = getRefreshTokenFromRequest(req, {
+      preferAppFallback: isAppAuthRequest,
+    });
 
     if (!refreshToken) {
       return res.status(400).json({ message: "Refresh token required" });
@@ -237,6 +242,7 @@ router.post("/refresh", async (req, res) => {
 
     return res.json({
       csrfToken,
+      ...(isAppAuthRequest ? { accessToken, refreshToken: newRefreshToken } : {}),
     });
   } catch (error) {
     return res
@@ -248,8 +254,10 @@ router.post("/refresh", async (req, res) => {
 // Logout route
 router.post("/logout", async (req, res) => {
   try {
-    const { refreshToken: bodyRefreshToken } = req.body || {};
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || bodyRefreshToken;
+    const isAppAuthRequest = isAppAuthModeRequest(req);
+    const refreshToken = getRefreshTokenFromRequest(req, {
+      preferAppFallback: isAppAuthRequest,
+    });
 
     if (refreshToken) {
       await RefreshToken.deleteOne({ token: refreshToken });

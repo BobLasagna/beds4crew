@@ -61,19 +61,39 @@ app.post(
 
 app.use(express.json({ limit: "10mb" })); // Add size limit
 
-// Configure CORS based on environment
-const corsOptions = process.env.NODE_ENV === 'production'
-  ? {
-      origin: CLIENT_URL || false,
-      credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
-    }
-  : {
-      origin: CLIENT_URL ? [CLIENT_URL, "http://localhost:5173"] : true,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
-    };
+const defaultAllowedOrigins = [
+  "http://localhost:5173",
+  "capacitor://localhost",
+  "ionic://localhost",
+];
+
+const configuredClientOrigins = CLIENT_URL
+  ? CLIENT_URL.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : [];
+
+const allowedOrigins = [...new Set([...configuredClientOrigins, ...defaultAllowedOrigins])];
+
+const corsOriginValidator = (origin, callback) => {
+  if (!origin) {
+    return callback(null, true);
+  }
+
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+
+  return callback(new Error(`CORS blocked for origin: ${origin}`));
+};
+
+// Configure CORS for web + native app wrapper origins
+const corsOptions = {
+  origin: corsOriginValidator,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Mode']
+};
 
 app.use(cors(corsOptions));
 app.use(analyticsMiddleware);
@@ -133,6 +153,9 @@ app.use('/api/geocoding', geocodingRouter);
 
 const emailPreferencesRoutes = require("./routes/emailPreferences");
 app.use("/api/email-preferences", emailPreferencesRoutes);
+
+const notificationsRoutes = require("./routes/notifications");
+app.use("/api/notifications", notificationsRoutes);
 
 const ticketRoutes = require("./routes/tickets");
 app.use("/api/tickets", ticketRoutes);

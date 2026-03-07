@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Snackbar, Alert } from "@mui/material";
+import { notificationService } from "../utils/notificationService";
 
 const SnackbarContext = createContext(null);
 const DEFAULT_DURATION = 2800;
@@ -33,6 +34,16 @@ export function SnackbarProvider({ children }) {
     if (reason === "clickaway") return;
     setOpen(false);
   };
+
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribeSnackbar(({ message, severity: eventSeverity, options }) => {
+      triggerSnackbar(message, eventSeverity, options);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   return (
     <SnackbarContext.Provider value={triggerSnackbar}>

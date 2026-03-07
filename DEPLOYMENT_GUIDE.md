@@ -334,6 +334,69 @@ app.use(cors({
 
 ---
 
+## 📱 Mobile App Demo Runbook (M5/S1)
+
+Use this runbook to demo the Capacitor app-wrapper flow and confirm critical v1 paths before launch.
+
+### Demo prerequisites
+
+- Node dependencies installed in both `client` and `server`
+- iOS: Xcode installed
+- Android: Android Studio + SDK installed
+- Optional (not required for local/native demo): Ionic account for Appflow/cloud packaging
+
+### One-click prompt runner (session automation)
+
+Use this when coordinating milestone session prompts:
+
+```bash
+./mobile-one-click.sh --status
+./mobile-one-click.sh
+```
+
+What it does:
+- Reads next queued mobile session prompt
+- Generates `MOBILE_APP_AUTORUN_PROMPT.md`
+- Copies prompt to clipboard + opens in VS Code (default behavior)
+
+### Local demo startup (web + API)
+
+```bash
+# from repo root
+npm run dev --prefix server
+npm run dev --prefix client
+```
+
+Expected demo URLs:
+- API: `http://localhost:3001`
+- Web shell (used by Capacitor runtime): `http://localhost:5173`
+
+### Native wrapper demo flow
+
+```bash
+npm run build:mobile --prefix client
+npm run mobile:open:ios --prefix client
+npm run mobile:open:android --prefix client
+```
+
+Run from Xcode/Android Studio on simulator/device after opening the native projects.
+
+### Critical-path demo checklist
+
+- [ ] App wrapper opens and loads current web bundle
+- [ ] Auth: login/logout and session refresh still work
+- [ ] Navigation shell: drawer/top/bottom nav actions route correctly
+- [ ] Notifications: unread badge/snackbar updates and preferences API path works
+- [ ] Booking-critical path: reservation list/thread open without blocking errors
+
+### Current v1 constraints (documented)
+
+- Notification sound customization is not implemented; app behavior uses OS default notification sound.
+- Ionic account/Appflow is optional for this project’s local/native runbook and not required for release readiness.
+- Local secure AI integration is deferred to post-v1 backlog and is not part of launch gating for M5.
+
+---
+
 ## 🎨 Customize Your URLs
 
 ### Option A: Customize Render Subdomain (Free)

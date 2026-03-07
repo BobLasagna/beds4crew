@@ -15,6 +15,12 @@ body {
     background-color: var(--app-bg-light);
 }
 
+html,
+body,
+#root {
+    min-height: 100%;
+}
+
 body[data-theme="dark"] {
     background-color: var(--app-bg-dark);
 }

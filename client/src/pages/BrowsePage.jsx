@@ -22,7 +22,7 @@ import { commonStyles } from "../utils/styleConstants";
 import MapView from '../components/HotelMapView';
 import PropertyCard from '../components/PropertyCard';
 import { useSnackbar } from '../components/AppSnackbar';
-import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, API_URL } from '../utils/api';
+import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, isAppTransportMode, API_URL } from '../utils/api';
 import { scrollElementIntoViewWithOffset } from '../utils/scroll';
 import { useNavigate } from 'react-router-dom';
 
@@ -84,6 +84,8 @@ const getLocationValidation = (input = '') => {
 };
 
 export default function BrowsePage() {
+  const isNativeApp = isAppTransportMode();
+  const defaultGridColumns = isNativeApp ? 1 : 3;
   const [allProperties, setAllProperties] = useState([]);
   const [center, setCenter] = useState(DEFAULT_LOCATION);
   const [radius, setRadius] = useState(DEFAULT_RADIUS_MILES);
@@ -94,7 +96,7 @@ export default function BrowsePage() {
   const [showMap, setShowMap] = useState(true);
   const [showControls] = useState(true);
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
-  const [gridColumns, setGridColumns] = useState(3);
+  const [gridColumns, setGridColumns] = useState(defaultGridColumns);
   const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
   const [endDate, setEndDate] = useState(null);
   const [locationOptions, setLocationOptions] = useState([]);
@@ -169,7 +171,7 @@ export default function BrowsePage() {
         if (state.radius) setRadius(state.radius);
         if (state.properties) setAllProperties(state.properties);
         if (state.sortBy) setSortBy(state.sortBy);
-        if (state.gridColumns) setGridColumns(state.gridColumns);
+        if (state.gridColumns) setGridColumns(isNativeApp ? 1 : state.gridColumns);
         if (state.locationInput) setLocationInput(state.locationInput);
         // Clear the saved state after restoring
         sessionStorage.removeItem('browseSearchState');
@@ -177,7 +179,7 @@ export default function BrowsePage() {
         console.error('Failed to restore search state:', err);
       }
     }
-  }, []);
+  }, [isNativeApp]);
 
   // Calculate distance in miles between two lat/lng points using Haversine formula
   const calculateDistance = useCallback((lat1, lng1, lat2, lng2) => {
@@ -220,6 +222,12 @@ export default function BrowsePage() {
       setCurrentPage(1);
     }
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (isNativeApp && gridColumns !== 1) {
+      setGridColumns(1);
+    }
+  }, [isNativeApp, gridColumns]);
 
   const fetchAllPropertiesPage = useCallback(async (page = 1) => {
     setLoading(true);
@@ -720,25 +728,27 @@ export default function BrowsePage() {
           <Typography variant="h6">
             Results ({totalResults})
           </Typography>
-          <Box>
-            <Typography variant="body2" gutterBottom>
-              Results per row
-            </Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={gridColumns}
-              onChange={(_, value) => {
-                if (value) setGridColumns(value);
-              }}
-            >
-              {gridOptions.map((option) => (
-                <ToggleButton key={option} value={option}>
-                  {option}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Box>
+          {!isNativeApp && (
+            <Box>
+              <Typography variant="body2" gutterBottom>
+                Results per row
+              </Typography>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={gridColumns}
+                onChange={(_, value) => {
+                  if (value) setGridColumns(value);
+                }}
+              >
+                {gridOptions.map((option) => (
+                  <ToggleButton key={option} value={option}>
+                    {option}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+          )}
         </Box>
         <Divider sx={{ mb: 2 }} />
 

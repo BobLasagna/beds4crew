@@ -1,12 +1,124 @@
-// In production (Render), use relative URLs since frontend and backend are on same domain
-// In development, use localhost
-const API_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.MODE === 'production' ? '/api' : 'http://localhost:3001/api');
+const LOCAL_DEV_API_URL = 'http://localhost:3001/api';
+
+const isBrowserRuntime = typeof window !== 'undefined';
+
+const isLocalhostHost = (host = '') => ['localhost', '127.0.0.1', '::1'].includes(host);
+
+const isLanHttpApiUrl = (url = '') =>
+  /^http:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url);
+
+const isNativeCapacitorRuntime = () => {
+  if (!isBrowserRuntime) return false;
+  const capacitor = window.Capacitor;
+
+  if (typeof capacitor?.isNativePlatform === 'function') {
+    return capacitor.isNativePlatform();
+  }
+
+  if (typeof capacitor?.getPlatform === 'function') {
+    return capacitor.getPlatform() !== 'web';
+  }
+
+  return false;
+};
+
+const resolveApiUrl = () => {
+  const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+
+  if (import.meta.env.MODE === 'production') {
+    return configuredApiUrl || '/api';
+  }
+
+  if (!configuredApiUrl) {
+    return LOCAL_DEV_API_URL;
+  }
+
+  if (!isBrowserRuntime) {
+    return configuredApiUrl;
+  }
+
+  const configuredWebApiUrl = import.meta.env.VITE_WEB_API_URL?.trim();
+  const localWebHost = isLocalhostHost(window.location.hostname);
+  const nativeRuntime = isNativeCapacitorRuntime();
+
+  if (localWebHost && !nativeRuntime && isLanHttpApiUrl(configuredApiUrl)) {
+    return configuredWebApiUrl || LOCAL_DEV_API_URL;
+  }
+
+  return configuredApiUrl;
+};
+
+const API_URL = resolveApiUrl();
 export const BASE_URL = API_URL.replace('/api', ''); // Base URL without /api
 export { API_URL };
 const AUTH_COOKIE_MODE = import.meta.env.VITE_AUTH_COOKIE_MODE !== 'false';
 const CSRF_STORAGE_KEY = 'csrfToken';
 const AUTH_SESSION_KEY = 'authSession';
+const ACCESS_TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
+const AUTH_TRANSPORT_OVERRIDE_KEY = 'authTransportModeOverride';
+
+const isBrowser = isBrowserRuntime;
+
+const readStorage = (key) => {
+  if (!isBrowser) return null;
+  return localStorage.getItem(key);
+};
+
+const writeStorage = (key, value) => {
+  if (!isBrowser) return;
+  localStorage.setItem(key, value);
+};
+
+const removeStorage = (key) => {
+  if (!isBrowser) return;
+  localStorage.removeItem(key);
+};
+
+const detectNativeAppRuntime = () => {
+  if (!isBrowser) return false;
+  if (import.meta.env.VITE_FORCE_APP_MODE === 'true') return true;
+
+  return isNativeCapacitorRuntime();
+};
+
+const getAuthTransportOverride = () => {
+  const envOverride = import.meta.env.VITE_AUTH_TRANSPORT_MODE;
+  if (envOverride === 'app' || envOverride === 'web') {
+    return envOverride;
+  }
+
+  const localOverride = readStorage(AUTH_TRANSPORT_OVERRIDE_KEY);
+  if (localOverride === 'app' || localOverride === 'web') {
+    return localOverride;
+  }
+
+  return null;
+};
+
+export const getAuthTransportMode = () => {
+  const override = getAuthTransportOverride();
+  if (override) return override;
+  return detectNativeAppRuntime() ? 'app' : 'web';
+};
+
+export const setAuthTransportModeOverride = (mode) => {
+  if (mode !== 'app' && mode !== 'web' && mode !== null) {
+    throw new Error('Invalid auth transport mode override');
+  }
+
+  if (mode === null) {
+    removeStorage(AUTH_TRANSPORT_OVERRIDE_KEY);
+    return;
+  }
+
+  writeStorage(AUTH_TRANSPORT_OVERRIDE_KEY, mode);
+};
+
+export const isAppTransportMode = () => getAuthTransportMode() === 'app';
+
+const getRequestCredentials = (useTokenTransport) => (useTokenTransport ? 'omit' : 'include');
+const getAuthModeHeaders = (useAppMode) => (useAppMode ? { 'X-Auth-Mode': 'app' } : {});
 
 // Simple in-memory cache for client-side requests
 const clientCache = new Map();
@@ -47,6 +159,7 @@ const clearCache = (pattern) => {
 const isStateChangingMethod = (method = 'GET') => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
 
 const readCookie = (name) => {
+  if (!isBrowser) return '';
   const cookieName = `${name}=`;
   const allCookies = document.cookie.split(';');
   for (const rawCookie of allCookies) {
@@ -58,11 +171,11 @@ const readCookie = (name) => {
   return '';
 };
 
-const getCsrfToken = () => localStorage.getItem(CSRF_STORAGE_KEY) || readCookie('b4c_csrf');
+const getCsrfToken = () => readStorage(CSRF_STORAGE_KEY) || readCookie('b4c_csrf');
 
 const setCsrfToken = (token) => {
   if (!token) return;
-  localStorage.setItem(CSRF_STORAGE_KEY, token);
+  writeStorage(CSRF_STORAGE_KEY, token);
 };
 
 const ensureCsrfToken = async () => {
@@ -84,45 +197,87 @@ const ensureCsrfToken = async () => {
 };
 
 // Backward-compatible auth helpers now using cookie session markers
-export const setTokens = (_accessToken, _refreshToken, csrfToken = null) => {
-  localStorage.setItem(AUTH_SESSION_KEY, 'true');
+export const setTokens = (accessToken, refreshToken, csrfToken = null) => {
+  writeStorage(AUTH_SESSION_KEY, 'true');
+
+  if (accessToken) {
+    writeStorage(ACCESS_TOKEN_KEY, accessToken);
+  }
+
+  if (refreshToken) {
+    writeStorage(REFRESH_TOKEN_KEY, refreshToken);
+  }
+
   if (csrfToken) {
     setCsrfToken(csrfToken);
   }
 };
 
-export const getAccessToken = () => (localStorage.getItem(AUTH_SESSION_KEY) === 'true' ? 'cookie-session' : null);
-export const getRefreshToken = () => null;
+export const setAppAuthTokens = (accessToken, refreshToken) => {
+  setTokens(accessToken, refreshToken, null);
+};
+
+export const getAccessToken = () => {
+  if (isAppTransportMode()) {
+    return readStorage(ACCESS_TOKEN_KEY);
+  }
+
+  return readStorage(AUTH_SESSION_KEY) === 'true' ? 'cookie-session' : null;
+};
+
+export const getRefreshToken = () => readStorage(REFRESH_TOKEN_KEY);
+
+export const getAuthSessionContext = () => ({
+  mode: getAuthTransportMode(),
+  hasSession: readStorage(AUTH_SESSION_KEY) === 'true',
+  hasAccessToken: Boolean(readStorage(ACCESS_TOKEN_KEY)),
+  hasRefreshToken: Boolean(readStorage(REFRESH_TOKEN_KEY)),
+  csrfToken: getCsrfToken() || null,
+});
 
 export const getStoredUser = () => {
   try {
-    return JSON.parse(localStorage.getItem("user") || "{}");
+    return JSON.parse(readStorage("user") || "{}");
   } catch {
     return {};
   }
 };
 
 export const setStoredUser = (user) => {
-  localStorage.setItem("user", JSON.stringify(user || {}));
+  writeStorage("user", JSON.stringify(user || {}));
 };
 
 // Clear tokens on logout
 export const clearTokens = () => {
-  localStorage.removeItem(AUTH_SESSION_KEY);
-  localStorage.removeItem(CSRF_STORAGE_KEY);
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("refreshToken");
-  localStorage.removeItem("user");
+  removeStorage(AUTH_SESSION_KEY);
+  removeStorage(CSRF_STORAGE_KEY);
+  removeStorage(ACCESS_TOKEN_KEY);
+  removeStorage(REFRESH_TOKEN_KEY);
+  removeStorage("user");
   clearCache(); // Clear all cached data
 };
 
 // Refresh access token using refresh token
 export const refreshAccessToken = async () => {
   try {
+    const isAppMode = isAppTransportMode();
+    const refreshToken = getRefreshToken();
+    const useTokenTransport = isAppMode && Boolean(refreshToken);
+    const currentAccessToken = readStorage(ACCESS_TOKEN_KEY);
+    const headers = {
+      "Content-Type": "application/json",
+      ...getAuthModeHeaders(isAppMode),
+    };
+
+    if (useTokenTransport && currentAccessToken) {
+      headers.Authorization = `Bearer ${currentAccessToken}`;
+    }
+
     const response = await fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
-      credentials: 'include',
-      headers: { "Content-Type": "application/json" },
+      credentials: getRequestCredentials(useTokenTransport),
+      headers,
+      ...(useTokenTransport ? { body: JSON.stringify({ refreshToken }) } : {}),
     });
 
     if (!response.ok) {
@@ -131,7 +286,13 @@ export const refreshAccessToken = async () => {
     }
 
     const data = await response.json();
-    setTokens(null, null, data?.csrfToken);
+
+    if (isAppMode && (data?.accessToken || data?.refreshToken)) {
+      setTokens(data?.accessToken || null, data?.refreshToken || refreshToken || null, data?.csrfToken);
+    } else {
+      setTokens(null, null, data?.csrfToken);
+    }
+
     return true;
   } catch (error) {
     clearTokens();
@@ -143,6 +304,9 @@ export const refreshAccessToken = async () => {
 export const fetchWithAuth = async (url, options = {}) => {
   const method = (options.method || 'GET').toUpperCase();
   const cacheKey = `${method}:${url}`;
+  const appMode = isAppTransportMode();
+  const accessToken = readStorage(ACCESS_TOKEN_KEY);
+  const useTokenTransport = appMode && Boolean(accessToken);
   
   // Check cache for GET requests
   if (!options.method || options.method === 'GET') {
@@ -152,15 +316,20 @@ export const fetchWithAuth = async (url, options = {}) => {
     }
   }
   
-  if (!AUTH_COOKIE_MODE && !getAccessToken()) {
+  if (!AUTH_COOKIE_MODE && !useTokenTransport && !getAccessToken() && !(appMode && getRefreshToken())) {
     throw new Error("No access token available");
   }
 
   const headers = {
     ...options.headers,
+    ...getAuthModeHeaders(appMode),
   };
+
+  if (useTokenTransport) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
   
-  if (AUTH_COOKIE_MODE && isStateChangingMethod(method)) {
+  if (AUTH_COOKIE_MODE && !useTokenTransport && isStateChangingMethod(method)) {
     const csrfToken = await ensureCsrfToken();
     headers['X-CSRF-Token'] = csrfToken;
   }
@@ -172,7 +341,7 @@ export const fetchWithAuth = async (url, options = {}) => {
   let response = await fetch(url, {
     ...options,
     method,
-    credentials: 'include',
+    credentials: getRequestCredentials(useTokenTransport),
     headers,
   });
 
@@ -180,15 +349,23 @@ export const fetchWithAuth = async (url, options = {}) => {
   if (response.status === 401) {
     await refreshAccessToken();
     const retryHeaders = { ...headers };
+    const refreshedAccessToken = readStorage(ACCESS_TOKEN_KEY);
+    const shouldUseTokenTransportOnRetry = appMode && Boolean(refreshedAccessToken);
 
-    if (AUTH_COOKIE_MODE && isStateChangingMethod(method)) {
+    if (AUTH_COOKIE_MODE && !shouldUseTokenTransportOnRetry && isStateChangingMethod(method)) {
       retryHeaders['X-CSRF-Token'] = await ensureCsrfToken();
+    }
+
+    if (shouldUseTokenTransportOnRetry && refreshedAccessToken) {
+      retryHeaders.Authorization = `Bearer ${refreshedAccessToken}`;
+    } else {
+      delete retryHeaders.Authorization;
     }
 
     response = await fetch(url, {
       ...options,
       method,
-      credentials: 'include',
+      credentials: getRequestCredentials(shouldUseTokenTransportOnRetry),
       headers: retryHeaders,
     });
   }
@@ -211,7 +388,7 @@ export const fetchWithAuth = async (url, options = {}) => {
 
 export const fetchJson = async (url, options = {}) => {
   const response = await fetch(url, {
-    credentials: 'include',
+    credentials: getRequestCredentials(false),
     ...options,
   });
   const data = await response.json().catch(() => ({}));
@@ -237,10 +414,24 @@ export const fetchJsonWithAuth = async (url, options = {}) => {
 // Logout function
 export const logout = async () => {
   try {
+    const appMode = isAppTransportMode();
+    const refreshToken = getRefreshToken();
+    const accessToken = readStorage(ACCESS_TOKEN_KEY);
+    const useTokenTransport = appMode && Boolean(accessToken || refreshToken);
+    const headers = {
+      "Content-Type": "application/json",
+      ...getAuthModeHeaders(appMode),
+    };
+
+    if (appMode && accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
     await fetch(`${API_URL}/auth/logout`, {
       method: "POST",
-      credentials: 'include',
-      headers: { "Content-Type": "application/json" },
+      credentials: getRequestCredentials(useTokenTransport),
+      headers,
+      ...(appMode && refreshToken ? { body: JSON.stringify({ refreshToken }) } : {}),
     });
   } catch (error) {
     console.error("Logout error:", error);

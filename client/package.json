@@ -6,10 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build --mode production",
+    "build:mobile": "npm run build && npx cap sync",
+    "mobile:sync": "npx cap sync",
+    "mobile:open:ios": "npx cap open ios",
+    "mobile:open:android": "npx cap open android",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^6.5.0",
@@ -29,6 +36,7 @@
     "vite": "^7.1.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.2.0",
     "@eslint/js": "^9.36.0",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",

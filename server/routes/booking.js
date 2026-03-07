@@ -42,7 +42,7 @@ const buildInitialBookingMessage = ({ bookedBeds, startDate, endDate }) => {
     .filter(Boolean);
 
   if (labels.length === 1) {
-    return `I would like to book your${labels[0]} from ${startLabel} to ${endLabel}.`;
+    return `I would like to book your ${labels[0]} from ${startLabel} to ${endLabel}.`;
   }
 
   return `I would like to book these beds from ${startLabel} to ${endLabel}.`;
