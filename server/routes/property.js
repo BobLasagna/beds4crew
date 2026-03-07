@@ -195,6 +195,16 @@ router.get("/", async (req, res) => {
     };
 
     const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const tokenizeQuery = (value = "") =>
+      String(value)
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    const isVerifiedHostIntent = /\b(verified|trusted)\b/.test(normalizedQuery) && /\bhost(s)?\b/.test(normalizedQuery);
+    const isNearAirportIntent = /\b(near\s+airports?|airport(s)?|layover|terminal)\b/.test(normalizedQuery);
 
     const baseQuery = { status: "active" };
     if (category) baseQuery.category = category;
@@ -215,18 +225,45 @@ router.get("/", async (req, res) => {
       baseQuery.latitude = { $exists: true, $ne: null };
       baseQuery.longitude = { $exists: true, $ne: null };
     }
+
+    if (isVerifiedHostIntent) {
+      const verifiedHostIds = (await User.find({ hasPaid: true }).select("_id").lean()).map((host) => host._id);
+      if (ownerId) {
+        baseQuery.ownerHost = verifiedHostIds.some((id) => String(id) === String(ownerId))
+          ? ownerId
+          : { $in: [] };
+      } else {
+        baseQuery.ownerHost = { $in: verifiedHostIds };
+      }
+    }
+
     if (query && String(query).trim()) {
-      const term = escapeRegex(String(query).trim());
-      const regex = new RegExp(term, "i");
-      baseQuery.$or = [
-        { title: regex },
-        { address: regex },
-        { category: regex },
-        { type: regex },
-        { description: regex },
-        { city: regex },
-        { country: regex },
-      ];
+      const stopWords = new Set(["a", "an", "and", "the", "for", "in", "on", "at", "to", "of", "with", "near"]);
+      const intentWords = new Set(["verified", "trusted", "host", "hosts", "airport", "airports", "layover", "terminal"]);
+      const rawTokens = tokenizeQuery(query);
+      const filteredTokens = rawTokens.filter((token) => token.length > 1 && !stopWords.has(token) && !intentWords.has(token));
+
+      const regexPool = [];
+      if (!isVerifiedHostIntent && !isNearAirportIntent) {
+        regexPool.push(new RegExp(escapeRegex(String(query).trim()), "i"));
+      }
+
+      filteredTokens.forEach((token) => {
+        regexPool.push(new RegExp(escapeRegex(token), "i"));
+      });
+
+      if (isNearAirportIntent) {
+        ["airport", "terminal", "flight", "layover", "shuttle"].forEach((keyword) => {
+          regexPool.push(new RegExp(escapeRegex(keyword), "i"));
+        });
+      }
+
+      const textFields = ["title", "address", "category", "type", "description", "city", "country", "facilities"];
+      const orConditions = regexPool.flatMap((regex) => textFields.map((field) => ({ [field]: regex })));
+
+      if (orConditions.length > 0) {
+        baseQuery.$or = orConditions;
+      }
     }
 
     if (hasGeoFilter) {

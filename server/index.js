@@ -120,6 +120,9 @@ app.use("/api/properties", propertyRoutes);
 const bookingRoutes = require("./routes/booking");
 app.use("/api/bookings", bookingRoutes);
 
+const reviewRoutes = require("./routes/review");
+app.use("/api/reviews", reviewRoutes);
+
 const userRoutes = require("./routes/user");
 app.use("/api/users", userRoutes);
 

@@ -1,11 +1,108 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Property = require("../models/Property");
 const Booking = require("../models/Booking");
 const Ticket = require("../models/Ticket");
+const Review = require("../models/Review");
+const cache = require("../utils/cache");
 const verifyToken = require("../middleware/auth");
 const { verifyAdmin } = require("../middleware/auth");
 const router = express.Router();
+
+const publishApprovedReviewToUser = async (reviewDoc) => {
+  const booking = await Booking.findById(reviewDoc.booking).select("host guest").lean();
+  if (!booking) return;
+
+  const revieweeId = reviewDoc.reviewee?.toString();
+  const isHostReviewee = revieweeId === booking.host?.toString();
+
+  const userReviewPayload = {
+    review: reviewDoc._id,
+    booking: reviewDoc.booking,
+    reviewer: reviewDoc.reviewer,
+    rating: reviewDoc.rating,
+    comment: reviewDoc.comment || "",
+    anonymous: Boolean(reviewDoc.anonymous),
+    createdAt: reviewDoc.createdAt,
+  };
+
+  if (isHostReviewee) {
+    await User.updateOne(
+      { _id: reviewDoc.reviewee, "ownerHostReviews.review": { $ne: reviewDoc._id } },
+      { $push: { ownerHostReviews: userReviewPayload } }
+    );
+    return;
+  }
+
+  await User.updateOne(
+    { _id: reviewDoc.reviewee, "guestReviews.review": { $ne: reviewDoc._id } },
+    { $push: { guestReviews: userReviewPayload } }
+  );
+};
+
+const unpublishApprovedReviewFromUser = async (reviewDoc) => {
+  await User.updateOne(
+    { _id: reviewDoc.reviewee },
+    {
+      $pull: {
+        ownerHostReviews: { review: reviewDoc._id },
+        guestReviews: { review: reviewDoc._id },
+      },
+    }
+  );
+};
+
+const refreshPropertyReviewMetrics = async (propertyId) => {
+  if (!propertyId) return;
+
+  const normalizedPropertyId = typeof propertyId === "string"
+    ? (mongoose.Types.ObjectId.isValid(propertyId) ? new mongoose.Types.ObjectId(propertyId) : null)
+    : propertyId;
+
+  if (!normalizedPropertyId) return;
+
+  const [stats] = await Review.aggregate([
+    {
+      $match: {
+        property: normalizedPropertyId,
+        status: "approved",
+      },
+    },
+    {
+      $group: {
+        _id: "$property",
+        reviewCount: { $sum: 1 },
+        averageRating: { $avg: "$rating" },
+      },
+    },
+  ]);
+
+  const reviewCount = stats?.reviewCount || 0;
+  const rating = reviewCount > 0
+    ? Number((stats.averageRating || 0).toFixed(2))
+    : null;
+
+  const property = await Property.findByIdAndUpdate(
+    normalizedPropertyId,
+    {
+      $set: {
+        rating,
+        reviewCount,
+      },
+    },
+    { new: true }
+  )
+    .select("ownerHost")
+    .lean();
+
+  cache.delete("properties:all");
+  cache.delete(`property:${normalizedPropertyId}`);
+
+  if (property?.ownerHost) {
+    cache.delete(`properties:user:${property.ownerHost}`);
+  }
+};
 
 const parsePagination = (req) => {
   const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
@@ -330,6 +427,109 @@ router.delete("/tickets", verifyToken, verifyAdmin, async (req, res) => {
     res.json({ message: "Tickets deleted successfully", deletedCount: deleteResult.deletedCount || 0 });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete tickets", error: error.message });
+  }
+});
+
+// Get reviews for moderation (default: pending)
+router.get("/reviews", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || "pending").toLowerCase();
+    const allowedStatuses = ["pending", "approved", "rejected"];
+    const statusFilter = allowedStatuses.includes(status) ? status : "pending";
+
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Review.find({ status: statusFilter })
+      .populate("reviewer", "firstName lastName email")
+      .populate("reviewee", "firstName lastName email")
+      .populate("property", "title")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!hasPagination) {
+      const reviews = await query;
+      return res.json(reviews);
+    }
+
+    const [reviews, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Review.countDocuments({ status: statusFilter }),
+    ]);
+
+    return res.json({
+      items: reviews,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch reviews", error: error.message });
+  }
+});
+
+// Approve review and publish to user review fields
+router.put("/reviews/:reviewId/approve", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { notes } = req.body || {};
+    const review = await Review.findById(req.params.reviewId);
+
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    if (review.status === "approved") {
+      await refreshPropertyReviewMetrics(review.property);
+      return res.json({ message: "Review already approved", review });
+    }
+
+    review.status = "approved";
+    review.publishedAt = new Date();
+    review.moderation = {
+      reviewedBy: req.user.id,
+      reviewedAt: new Date(),
+      notes: String(notes || "").trim(),
+    };
+    await review.save();
+
+    await publishApprovedReviewToUser(review);
+    await refreshPropertyReviewMetrics(review.property);
+
+    return res.json({ message: "Review approved and published", review });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to approve review", error: error.message });
+  }
+});
+
+// Reject review (not published)
+router.put("/reviews/:reviewId/reject", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { notes } = req.body || {};
+    const review = await Review.findById(req.params.reviewId);
+
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    const wasApproved = review.status === "approved";
+    review.status = "rejected";
+    review.publishedAt = null;
+    review.moderation = {
+      reviewedBy: req.user.id,
+      reviewedAt: new Date(),
+      notes: String(notes || "").trim(),
+    };
+    await review.save();
+
+    if (wasApproved) {
+      await unpublishApprovedReviewFromUser(review);
+      await refreshPropertyReviewMetrics(review.property);
+    }
+
+    return res.json({ message: "Review rejected", review });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to reject review", error: error.message });
   }
 });
 

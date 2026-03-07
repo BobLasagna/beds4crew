@@ -18,6 +18,34 @@ const UserSchema = new mongoose.Schema(
     wishList:       { type: [mongoose.Schema.Types.ObjectId], ref: "Property", default: [] },
     propertyList:   { type: [mongoose.Schema.Types.ObjectId], ref: "Property", default: [] },
     reservationList:{ type: [mongoose.Schema.Types.ObjectId], ref: "Booking", default: [] },
+    ownerHostReviews: {
+      type: [
+        {
+          review: { type: mongoose.Schema.Types.ObjectId, ref: "Review", required: true },
+          booking: { type: mongoose.Schema.Types.ObjectId, ref: "Booking", required: true },
+          reviewer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+          rating: { type: Number, min: 1, max: 5, required: true },
+          comment: { type: String, default: "" },
+          anonymous: { type: Boolean, default: false },
+          createdAt: { type: Date, default: Date.now }
+        }
+      ],
+      default: []
+    },
+    guestReviews: {
+      type: [
+        {
+          review: { type: mongoose.Schema.Types.ObjectId, ref: "Review", required: true },
+          booking: { type: mongoose.Schema.Types.ObjectId, ref: "Booking", required: true },
+          reviewer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+          rating: { type: Number, min: 1, max: 5, required: true },
+          comment: { type: String, default: "" },
+          anonymous: { type: Boolean, default: false },
+          createdAt: { type: Date, default: Date.now }
+        }
+      ],
+      default: []
+    },
     // wishList:       [{ type: mongoose.Schema.Types.ObjectId, ref: "Property" }],
 
     

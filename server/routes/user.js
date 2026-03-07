@@ -1,6 +1,7 @@
 const express = require("express");
 const User = require("../models/User");
 const Property = require("../models/Property");
+const Review = require("../models/Review");
 const verifyToken = require("../middleware/auth");
 const cache = require("../utils/cache");
 const router = express.Router();
@@ -171,6 +172,60 @@ router.get("/subscription-status", verifyToken, async (req, res) => {
       message: "Failed to get subscription status",
       error: process.env.NODE_ENV === 'production' ? undefined : error.message
     });
+  }
+});
+
+// Public review stats for a user profile (approved/published reviews only)
+router.get("/:userId/review-stats", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select("firstName lastName ownerHostReviews guestReviews")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const approvedReviews = await Review.find({
+      reviewee: req.params.userId,
+      status: "approved",
+    })
+      .populate("reviewer", "firstName lastName")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const reviewCount = approvedReviews.length;
+    const averageRating = reviewCount > 0
+      ? Number((approvedReviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(2))
+      : null;
+
+    return res.json({
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+      reviewCount,
+      averageRating,
+      publishedBreakdown: {
+        ownerHostReviews: user.ownerHostReviews?.length || 0,
+        guestReviews: user.guestReviews?.length || 0,
+      },
+      recentApprovedReviews: approvedReviews.slice(0, 10).map((review) => ({
+        id: review._id,
+        booking: review.booking,
+        property: review.property,
+        rating: review.rating,
+        comment: review.comment,
+        anonymous: review.anonymous,
+        reviewerName: review.anonymous
+          ? "Anonymous"
+          : `${review.reviewer?.firstName || ""} ${review.reviewer?.lastName || ""}`.trim() || "User",
+        createdAt: review.createdAt,
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch review stats", error: error.message });
   }
 });
 
