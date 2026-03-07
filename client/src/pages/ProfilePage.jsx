@@ -56,6 +56,7 @@ export default function ProfilePage() {
   const [passwordEmailLoading, setPasswordEmailLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [billingLoading, setBillingLoading] = useState(false);
+  const [showHostFlavorText, setShowHostFlavorText] = useState(false);
   const [tierInfo, setTierInfo] = useState({
     tier: 0,
     tierName: "Free",
@@ -696,9 +697,22 @@ export default function ProfilePage() {
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
               Host Status
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Manage your host status by subscribing to Beds4Crew.
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: 0.25, fontSize: "0.8rem", lineHeight: 1.4 }}
+            >
+              Become a verified host to unlock more listing features and gain traveler trust.
+              {showHostFlavorText && " Manage your subscription or choose a plan to get started.\n\nVerified hosts have an active subscription and have completed the onboarding process. If you're already a host but not verified, please check your email for onboarding instructions or contact support.  Subscription status is synced with our payment provider, but you can manually sync if you've recently made changes to your subscription."}
             </Typography>
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => setShowHostFlavorText((prev) => !prev)}
+              sx={{ p: 0, mb: 2, minWidth: "auto", textTransform: "none", fontSize: "0.75rem", lineHeight: 1.2 }}
+            >
+              {showHostFlavorText ? "Show less" : "Show more"}
+            </Button>
             <Alert
               severity={isSubscriptionActive ? "success" : "warning"}
               sx={{ mb: 2 }}

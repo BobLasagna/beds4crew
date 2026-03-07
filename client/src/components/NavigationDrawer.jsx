@@ -306,7 +306,6 @@ export default function NavigationDrawer({ children }) {
         <ListItemButton
           onClick={() => {
             reEnableCookieNotice();
-            snackbar("Cookie notice will be shown again.", "info");
           }}
         >
           <ListItemIcon><SettingsIcon /></ListItemIcon>

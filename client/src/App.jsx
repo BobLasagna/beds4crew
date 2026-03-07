@@ -1,8 +1,10 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { forwardRef, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Alert, Box, Button, CircularProgress, Snackbar } from "@mui/material";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link as RouterLink } from "react-router-dom";
+import { Alert, Box, Button, CircularProgress, AlertTitle, Snackbar } from "@mui/material";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import Slide from "@mui/material/Slide";
 
 import { SnackbarProvider } from "./components/AppSnackbar";
 import NavigationDrawer from "./components/NavigationDrawer";
@@ -39,6 +41,18 @@ const LoadingFallback = () => (
   </Box>
 );
 
+const CookieNoticeTransition = forwardRef(function CookieNoticeTransition(props, ref) {
+  const { in: isOpen, ...rest } = props;
+  return (
+    <Slide
+      ref={ref}
+      {...rest}
+      in={isOpen}
+      direction={ "up" }
+    />
+  );
+});
+
 const RouteChangeEffects = () => {
   const location = useLocation();
   const previousLocationRef = useRef(null);
@@ -67,11 +81,38 @@ const RouteChangeEffects = () => {
 function App() {
   const { cookieNoticeDismissed, dismissCookieNotice, reEnableCookieNotice } = useThemeMode();
   const [showCookieNotice, setShowCookieNotice] = useState(false);
+  const [consentStatus, setConsentStatus] = useState(null);
 
   useEffect(() => {
-    const shouldShowNotice = import.meta.env.VITE_SHOW_COOKIE_NOTICE !== 'false' && !cookieNoticeDismissed;
+    fetch(`${API_URL}/analytics/consent/status`, {
+      credentials: "include",
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((status) => {
+        if (status) {
+          setConsentStatus(status);
+        }
+      })
+      .catch(() => {
+        setConsentStatus(null);
+      });
+  }, []);
+
+  useEffect(() => {
+    const showCookieNoticeEnabled = import.meta.env.VITE_SHOW_COOKIE_NOTICE !== 'false';
+    const consentValue = consentStatus?.consentValue;
+    const hasConsentDecision = consentValue === "granted" || consentValue === "denied";
+    const requiresOptIn = Boolean(consentStatus?.requiredOptIn);
+    const forcePrompt = requiresOptIn && !hasConsentDecision;
+
+    const shouldShowNotice = showCookieNoticeEnabled
+      && (forcePrompt || !cookieNoticeDismissed);
+
     setShowCookieNotice(shouldShowNotice);
-  }, [cookieNoticeDismissed]);
+  }, [cookieNoticeDismissed, consentStatus]);
 
   useEffect(() => {
     // On app load, refresh user data from server to sync localStorage/session
@@ -107,8 +148,38 @@ function App() {
     setShowCookieNotice(false);
   };
 
-  const handleKeepReminding = () => {
-    reEnableCookieNotice();
+  const submitAnalyticsConsent = async (analytics) => {
+    try {
+      await fetch(`${API_URL}/analytics/consent`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ analytics }),
+      });
+
+      const refreshed = await fetch(`${API_URL}/analytics/consent/status`, {
+        credentials: "include",
+      });
+      if (refreshed.ok) {
+        const data = await refreshed.json();
+        setConsentStatus(data);
+      }
+    } catch (error) {
+      // no-op: banner remains visible if consent update fails
+    }
+  };
+
+  const handleAllowAnalytics = async () => {
+    await submitAnalyticsConsent(true);
+    dismissCookieNotice();
+    setShowCookieNotice(false);
+  };
+
+  const handleDenyAnalytics = async () => {
+    await submitAnalyticsConsent(false);
+    dismissCookieNotice();
     setShowCookieNotice(false);
   };
 
@@ -149,23 +220,27 @@ function App() {
               open={showCookieNotice}
               anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
               autoHideDuration={null}
+              TransitionComponent={CookieNoticeTransition}
             >
+              
               <Alert
-                severity="info"
+                severity={consentStatus?.requiredOptIn ? "warning" : "info"}
                 variant="filled"
-                onClose={handleDismissCookieNotice}
+                onClose={consentStatus?.requiredOptIn ? undefined : handleDismissCookieNotice}
                 action={(
                   <Box sx={{ display: "flex", gap: 1 }}>
-                    <Button color="inherit" size="small" onClick={handleKeepReminding}>
-                      Keep showing
+                    <Button color="inherit" size="small" onClick={handleAllowAnalytics}>
+                      Allow analytics
                     </Button>
-                    <Button color="inherit" size="small" onClick={handleDismissCookieNotice}>
-                      Dismiss
+                    <Button color="inherit" size="small" onClick={handleDenyAnalytics}>
+                      Essential only
                     </Button>
                   </Box>
                 )}
-              >
-                We use secure cookies to keep you signed in and protect account actions.
+              ><AlertTitle>Cookie Preferences</AlertTitle>
+                {consentStatus?.requiredOptIn
+                  ? "To comply with regulations, we require your consent to use analytics cookies that help us improve the site. Please choose your preference."
+                  : "We use cookies to understand site usage and improve our content."}
               </Alert>
             </Snackbar>
           </NavigationDrawer>
