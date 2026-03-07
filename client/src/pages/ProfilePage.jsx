@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
   TextField,
@@ -20,19 +20,22 @@ import {
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, fetchJson, getStoredUser, setStoredUser, API_URL } from "../utils/api";
+import { fetchWithAuth, fetchJson, fetchJsonWithAuth, getStoredUser, setStoredUser, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
-import { getListingMetrics } from "../utils/helpers";
 import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import { useLocation, useNavigate } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
+import { LoadingState, NoFavorites } from "../components/EmptyState";
 
 export default function ProfilePage() {
   const navigate = useNavigate();  const location = useLocation();
   const storedUser = getStoredUser();
   const listingsTabRef = useRef(null);
+  const favoritesTabRef = useRef(null);
   const [tab, setTab] = useState(0);
   const [listings, setListings] = useState([]);
+  const [favoriteProperties, setFavoriteProperties] = useState([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [form, setForm] = useState({
     firstName: storedUser.firstName || "",
     lastName: storedUser.lastName || "",
@@ -63,6 +66,10 @@ export default function ProfilePage() {
     status: storedUser.subscriptionStatus || "",
     currentPeriodEnd: storedUser.subscriptionCurrentPeriodEnd || null,
     hasPaid: storedUser.hasPaid || false,
+  });
+  const [reviewStats, setReviewStats] = useState({
+    averageRating: null,
+    reviewCount: 0,
   });
   const snackbar = useSnackbar();
 
@@ -169,8 +176,23 @@ export default function ProfilePage() {
       })
       .catch(err => console.error("Failed to fetch tier info:", err));
   }, [storedUser.id, storedUser.role, subscriptionInfo.status]);
-  const profileMetrics = useMemo(() => getListingMetrics({}), []);
-  const hasRating = typeof profileMetrics.rating === "number" && typeof profileMetrics.reviews === "number";
+
+  useEffect(() => {
+    if (!storedUser.id) return;
+
+    fetchJson(`${API_URL}/users/${storedUser.id}/review-stats`)
+      .then((data) => {
+        setReviewStats({
+          averageRating: typeof data?.averageRating === "number" ? data.averageRating : null,
+          reviewCount: typeof data?.reviewCount === "number" ? data.reviewCount : 0,
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to load review stats:", err);
+      });
+  }, [storedUser.id]);
+
+  const hasRating = typeof reviewStats.averageRating === "number" && reviewStats.reviewCount > 0;
 
   const validateForm = () => {
     const errors = {};
@@ -415,6 +437,29 @@ export default function ProfilePage() {
     }
   };
 
+  const loadFavorites = async () => {
+    if (!storedUser.id) return;
+
+    setFavoritesLoading(true);
+    try {
+      const summary = await fetchJsonWithAuth(`${API_URL}/users/wishlist/summary`);
+      setFavoriteProperties(Array.isArray(summary) ? summary : []);
+    } finally {
+      setFavoritesLoading(false);
+    }
+  };
+
+  const handleRemoveFavorite = async (propertyId) => {
+    const res = await fetchWithAuth(`${API_URL}/users/wishlist/${propertyId}`, {
+      method: "DELETE"
+    });
+
+    if (res.ok) {
+      setFavoriteProperties(prev => prev.filter((property) => property._id !== propertyId));
+      snackbar("Property removed from favorites", "info");
+    }
+  };
+
   const normalizedStatus = (subscriptionInfo.status || "").replace("_", " ");
   const isSubscriptionActive = ["active", "trialing"].includes(subscriptionInfo.status);
   const hasBilling = Boolean(subscriptionInfo.status) || subscriptionInfo.hasPaid;
@@ -432,8 +477,22 @@ export default function ProfilePage() {
       window.requestAnimationFrame(() => {
         scrollElementIntoViewWithOffset(listingsTabRef.current, { extraOffset: 16 });
       });
+      return;
+    }
+
+    if (tabParam === "favorites") {
+      setTab(1);
+
+      window.requestAnimationFrame(() => {
+        scrollElementIntoViewWithOffset(favoritesTabRef.current, { extraOffset: 16 });
+      });
     }
   }, [location.search]);
+
+  useEffect(() => {
+    if (tab !== 1) return;
+    loadFavorites().catch(() => {});
+  }, [tab, storedUser.id]);
 
   return (
     <Box sx={commonStyles.contentContainer}>
@@ -455,7 +514,6 @@ export default function ProfilePage() {
               {storedUser.role === "host" ? (
                 <>
                   {subscriptionInfo.hasPaid ? "✓ Verified Host" : "Host (Unverified)"}
-                  {profileMetrics.sellerLevel && ` • ${profileMetrics.sellerLevel}`}
                 </>
               ) : (
                 "Guest Account"
@@ -480,19 +538,19 @@ export default function ProfilePage() {
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">Rating</Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>{hasRating ? profileMetrics.rating : "--"}</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>{hasRating ? reviewStats.averageRating.toFixed(2) : "--"}</Typography>
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">Reviews</Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>{hasRating ? profileMetrics.reviews : "0"}</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>{reviewStats.reviewCount}</Typography>
             </Box>
           </Box>
         </Box>
       </Card>
 
-      <Tabs id="listings-tab" ref={listingsTabRef} value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 3 }}>
-        <Tab label="Listings" />
-        <Tab label="Portfolio" />
+      <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 3 }}>
+        <Tab id="listings-tab" ref={listingsTabRef} label="Listings" />
+        <Tab id="favorites-tab" ref={favoritesTabRef} label="Favorites" />
         <Tab label="Account settings" />
       </Tabs>
 
@@ -528,29 +586,30 @@ export default function ProfilePage() {
       )}
 
       {tab === 1 && (
-        <Card sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-            Portfolio highlights
+        <>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+            My Favorites
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Showcase your best spaces and recent activity to build trust.
-          </Typography>
-          <Divider sx={{ mb: 2 }} />
-          <Grid container spacing={2}>
-            {listings.slice(0, 6).map((listing) => (
-              <Grid item xs={6} md={4} key={listing._id}>
-                <Card sx={{ p: 2, borderRadius: 3 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                    {listing.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {listing.city}, {listing.country}
-                  </Typography>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Card>
+
+          {favoritesLoading ? (
+            <LoadingState message="Loading favorites..." />
+          ) : favoriteProperties.length > 0 ? (
+            <Grid container spacing={{ xs: 2, sm: 3 }}>
+              {favoriteProperties.map((property) => (
+                <Grid item xs={12} sm={6} md={4} key={property._id}>
+                  <PropertyCard
+                    property={property}
+                    onWishlistToggle={handleRemoveFavorite}
+                    isWishlisted
+                    showWishlist
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <NoFavorites />
+          )}
+        </>
       )}
 
       {tab === 2 && (

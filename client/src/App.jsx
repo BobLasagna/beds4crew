@@ -24,13 +24,13 @@ const PropertyDetailPage = lazy(() => import("./pages/PropertyDetailPage"));
 const TripListPage = lazy(() => import("./pages/TripListPage"));
 const ReservationListPage = lazy(() => import("./pages/ReservationListPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const WishListPage = lazy(() => import("./pages/WishListPage"));
 const BrowsePage = lazy(() => import('./pages/BrowsePage'));
 const PricingPage = lazy(() => import('./pages/PricingPage'));
 const SupportPage = lazy(() => import('./pages/SupportPage'));
 const SupportResourcePage = lazy(() => import('./pages/SupportResourcePage'));
 const SupportChatPage = lazy(() => import('./pages/SupportChatPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const ReviewPage = lazy(() => import('./pages/ReviewPage'));
 
 // Loading component
 const LoadingFallback = () => (
@@ -132,9 +132,10 @@ function App() {
                 <Route path="/property/:id" element={<PropertyDetailPage />} />
                 <Route path="/trips" element={<ProtectedRoute requiredRole="guest"> <TripListPage /> </ProtectedRoute>} />
                 <Route path="/my-listings" element={<ProtectedRoute requiredRole="host"> <Navigate to="/profile?tab=listings#listings-tab" replace /> </ProtectedRoute>} />
+                <Route path="/favorites" element={<ProtectedRoute> <Navigate to="/profile?tab=favorites#favorites-tab" replace /> </ProtectedRoute>} />
                 <Route path="/reservations" element={<ProtectedRoute requiredRole="host"> <ReservationListPage /> </ProtectedRoute>} />
+                <Route path="/review/:token" element={<ProtectedRoute> <ReviewPage /> </ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute> <ProfilePage /> </ProtectedRoute>} />
-                <Route path="/wishlist" element={<ProtectedRoute> <WishListPage /> </ProtectedRoute>} />
                 <Route path="/support" element={<SupportPage />} />
                 <Route path="/support/chat" element={<SupportChatPage />} />
                 {SUPPORT_INTERNAL_PATHS.map((path) => (

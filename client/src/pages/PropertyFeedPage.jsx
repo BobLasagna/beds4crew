@@ -74,7 +74,7 @@ export default function PropertyFeedPage() {
 
   const handleToggleWishlist = async (propertyId) => {
     if (!user?.id) {
-      snackbar("Must be logged in to add to your wishlist", "error");
+      snackbar("Must be logged in to save favorites", "error");
       return;
     }
     const inWishlist = wishlist.includes(propertyId);
@@ -84,10 +84,10 @@ export default function PropertyFeedPage() {
     });
     if (res.ok) {
       if (inWishlist) {
-        snackbar("Property removed from wishlist", "info");
+        snackbar("Property removed from favorites", "info");
         setWishlist(prev => prev.filter(id => id !== propertyId));
       } else {
-        snackbar("Property wishlisted", "info");
+        snackbar("Property saved to favorites", "info");
         setWishlist(prev => [...prev, propertyId]);
       }
     }
@@ -312,9 +312,6 @@ export default function PropertyFeedPage() {
           </Select>
         </FormControl>
       </Box>
-      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-        Search text
-      </Typography>
       <TextField
         label="Search"
         value={queryInput}

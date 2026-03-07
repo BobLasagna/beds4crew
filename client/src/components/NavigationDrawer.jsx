@@ -256,9 +256,9 @@ export default function NavigationDrawer({ children }) {
         </ListItemButton>
         {user.role === "guest" && (
           <>
-            <ListItemButton onClick={() => (clickedIconLink("/wishlist"))}>
+            <ListItemButton onClick={() => (clickedIconLink("/favorites"))}>
               <ListItemIcon><FavoriteIcon /></ListItemIcon>
-              <ListItemText primary="Wishlist" />
+              <ListItemText primary="Favorites" />
             </ListItemButton>
             <ListItemButton onClick={() => (clickedIconLink("/trips"))}>
               <ListItemIcon>
@@ -420,7 +420,7 @@ export default function NavigationDrawer({ children }) {
               <MenuItem key="profile" onClick={() => { closeAccountMenu(); navigate("/profile"); }}>Profile</MenuItem>,
               ...(user.role === "guest"
                 ? [
-                    <MenuItem key="wishlist" onClick={() => { closeAccountMenu(); navigate("/wishlist"); }}>Wishlist</MenuItem>,
+                    <MenuItem key="favorites" onClick={() => { closeAccountMenu(); navigate("/favorites"); }}>Favorites</MenuItem>,
                     <MenuItem key="trips" onClick={() => { closeAccountMenu(); navigate("/trips"); }}>Trips</MenuItem>,
                   ]
                 : []),

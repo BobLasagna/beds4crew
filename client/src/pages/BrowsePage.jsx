@@ -45,6 +45,44 @@ const SORT_OPTIONS = [
   { value: 'price-high', label: 'Price: High to Low' },
 ];
 
+const CITY_NAME_REGEX = /^[A-Za-z]+(?:[\s.'-][A-Za-z]+)*(?:,\s*[A-Za-z]{2})?$/;
+
+const normalizeLocationQuery = (input = '') => input.trim().replace(/\s+/g, ' ');
+
+const getLocationValidation = (input = '') => {
+  const query = normalizeLocationQuery(input);
+
+  if (!query) {
+    return { query, valid: false, message: '' };
+  }
+
+  if (/\d/.test(query)) {
+    return {
+      query,
+      valid: false,
+      message: 'City names cannot include numbers.',
+    };
+  }
+
+  if (query.length < 3) {
+    return {
+      query,
+      valid: false,
+      message: 'Enter at least 3 letters for a city.',
+    };
+  }
+
+  if (CITY_NAME_REGEX.test(query)) {
+    return { query, valid: true, message: '' };
+  }
+
+  return {
+    query,
+    valid: false,
+    message: 'Use letters/spaces for city names (e.g., Miami, FL).',
+  };
+};
+
 export default function BrowsePage() {
   const [allProperties, setAllProperties] = useState([]);
   const [center, setCenter] = useState(DEFAULT_LOCATION);
@@ -71,6 +109,40 @@ export default function BrowsePage() {
   const user = getStoredUser();
   const mapSectionRef = useRef(null);
   const resultsListRef = useRef(null);
+  const locationValidation = useMemo(
+    () => getLocationValidation(locationInput),
+    [locationInput]
+  );
+  const combinedLocationOptions = useMemo(
+    () => [...POPULAR_LOCATIONS, ...locationOptions],
+    [locationOptions]
+  );
+
+  const applyLocationSelection = useCallback((location) => {
+    if (!location) return;
+    setCenter({ lat: location.lat, lng: location.lng });
+    setLocationInput(location.label || '');
+    setCurrentPage(1);
+  }, []);
+
+  const findMatchingLocationOption = useCallback((input = '') => {
+    const normalizedInput = normalizeLocationQuery(input).toLowerCase();
+    if (!normalizedInput) return null;
+
+    return (
+      combinedLocationOptions.find((option) => {
+        const normalizedLabel = normalizeLocationQuery(option.label).toLowerCase();
+        return normalizedLabel === normalizedInput;
+      }) || null
+    );
+  }, [combinedLocationOptions]);
+
+  const commitTypedLocationIfMatch = useCallback(() => {
+    const match = findMatchingLocationOption(locationInput);
+    if (match) {
+      applyLocationSelection(match);
+    }
+  }, [applyLocationSelection, findMatchingLocationOption, locationInput]);
 
   // Fetch user's wishlist
   useEffect(() => {
@@ -294,7 +366,7 @@ export default function BrowsePage() {
 
   // Debounced location search for autocomplete
   useEffect(() => {
-    if (!locationInput || locationInput.length < 3) {
+    if (!locationValidation.query || !locationValidation.valid) {
       setLocationOptions([]);
       return;
     }
@@ -302,23 +374,26 @@ export default function BrowsePage() {
     const timer = setTimeout(async () => {
       setGeocoding(true);
       try {
-        const data = await fetchJson(`${API_URL}/geocoding/search?q=${encodeURIComponent(locationInput)}`);
+        const data = await fetchJson(`${API_URL}/geocoding/search?q=${encodeURIComponent(locationValidation.query)}`);
         if (data.lat && data.lon) {
           setLocationOptions([{
-            label: data.display_name || locationInput,
+            label: data.display_name || locationValidation.query,
             lat: parseFloat(data.lat),
             lng: parseFloat(data.lon)
           }]);
+        } else {
+          setLocationOptions([]);
         }
       } catch (err) {
         console.error('Geocoding error:', err);
+        setLocationOptions([]);
       } finally {
         setGeocoding(false);
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [locationInput]);
+  }, [locationValidation]);
 
   // Search by date range
   const handleDateSearch = async () => {
@@ -372,7 +447,7 @@ export default function BrowsePage() {
 
   const handleToggleWishlist = async (propertyId) => {
     if (!user?.id) {
-      snackbar('Please login to add to wishlist', 'warning');
+      snackbar('Please login to save favorites', 'warning');
       return;
     }
     
@@ -384,16 +459,16 @@ export default function BrowsePage() {
       if (res.ok) {
         setWishlist(prev => {
           if (inWishlist) {
-            snackbar('Property removed from wishlist', 'info');
+            snackbar('Property removed from favorites', 'info');
             return prev.filter(id => id !== propertyId);
           } else {
-            snackbar('Property added to wishlist', 'info');
+            snackbar('Property saved to favorites', 'info');
             return [...prev, propertyId];
           }
         });
       }
     } catch {
-      snackbar('Failed to update wishlist', 'error');
+      snackbar('Failed to update favorites', 'error');
     }
   };
 
@@ -479,28 +554,45 @@ export default function BrowsePage() {
             </Button>
           </Box>
 
-          {/* TODO REPAIR LOCATION SEARCH BY ZIP OR CITY */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
             {/* Location Search with Autocomplete */}
             <Autocomplete
               freeSolo
-              options={[...POPULAR_LOCATIONS, ...locationOptions]}
+              options={combinedLocationOptions}
               getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
               inputValue={locationInput}
-              onInputChange={(e, value) => setLocationInput(value)}
+              onInputChange={(_, value) => setLocationInput(value)}
               onChange={(e, value) => {
                 if (value && typeof value === 'object') {
-                  setCenter({ lat: value.lat, lng: value.lng });
-                  setCurrentPage(1);
+                  applyLocationSelection(value);
+                  return;
+                }
+
+                if (typeof value === 'string') {
+                  const match = findMatchingLocationOption(value);
+                  if (match) {
+                    applyLocationSelection(match);
+                  }
                 }
               }}
               loading={geocoding}
               renderInput={(params) => (
                 <TextField
                   {...params}
+                  onBlur={commitTypedLocationIfMatch}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      commitTypedLocationIfMatch();
+                    }
+                  }}
                   label="Search Location"
-                  placeholder="City name"
-                  helperText="Type to search cities"
+                  placeholder="City (e.g. Miami, FL)"
+                  error={Boolean(locationValidation.query) && !locationValidation.valid}
+                  helperText={
+                    locationValidation.query && !locationValidation.valid
+                      ? locationValidation.message
+                      : 'Search by city name only'
+                  }
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (

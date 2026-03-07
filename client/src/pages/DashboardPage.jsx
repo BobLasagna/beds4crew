@@ -26,11 +26,12 @@ const categoryTiles = [
 ];
 
 const popularSearches = [
-  "Crew-friendly stays",
-  "Near airports",
-  "Short-term crew housing",
-  "City layovers",
   "Verified hosts",
+  "Near airports",
+  "WiFi",
+  "Parking",
+  "Private room",
+  "Apartment",
 ];
 
 export default function DashboardPage() {

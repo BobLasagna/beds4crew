@@ -2,14 +2,11 @@ import React, { useEffect, useState } from "react";
 import { Box, Typography, Grid } from "@mui/material";
 import { useLocation } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
-import { LoadingState, NoWishlist } from "../components/EmptyState";
+import { LoadingState, NoFavorites } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchJsonWithAuth, fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 
-
-// TODO ADD WISHLIST FUNCTION TO PROPERTY CARD
-// TODO ADD WISHLIST TAB TO PROFILE PAGE
 export default function WishListPage() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,18 +32,18 @@ export default function WishListPage() {
     });
     if (res.ok) {
       setProperties(prev => prev.filter(p => p._id !== propId));
-      snackbar("Property removed from wishlist", "info");
+      snackbar("Property removed from favorites", "info");
     }
   };
 
   if (loading) {
-    return <LoadingState message="Loading wishlist..." />;
+    return <LoadingState message="Loading favorites..." />;
   }
 
   return (
     <Box sx={commonStyles.contentContainer}>
       <Typography variant="h4" sx={commonStyles.pageTitle}>
-        My Wishlist
+        My Favorites
       </Typography>
       
       {properties.length > 0 ? (
@@ -63,7 +60,7 @@ export default function WishListPage() {
           ))}
         </Grid>
       ) : (
-        <NoWishlist />
+        <NoFavorites />
       )}
     </Box>
   );

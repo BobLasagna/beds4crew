@@ -27,7 +27,7 @@ const getBreadcrumbLabel = (routePath) => {
   if (!routePath) return "Listings";
   if (routePath.startsWith("/browse")) return "Browse";
   if (routePath.startsWith("/properties")) return "Listings";
-  if (routePath.startsWith("/wishlist")) return "Wishlist";
+  if (routePath.startsWith("/favorites")) return "Favorites";
   if (routePath.startsWith("/trips")) return "Trips";
   if (routePath.startsWith("/my-listings")) return "My listings";
   if (routePath.startsWith("/reservations")) return "Reservations";
@@ -39,6 +39,7 @@ const getBreadcrumbLabel = (routePath) => {
 export default function PropertyDetailPage() {
   const { id } = useParams();
   const [property, setProperty] = useState(null);
+  const [propertyReviews, setPropertyReviews] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
@@ -79,9 +80,10 @@ export default function PropertyDetailPage() {
   const previousRouteLabel = getBreadcrumbLabel(previousRoute);
 
   const loadPropertyData = useCallback(async () => {
-    const [propertyData, bookingData] = await Promise.all([
+    const [propertyData, bookingData, reviewsData] = await Promise.all([
       fetchJson(`${API_URL}/properties/${id}`),
       fetchJson(`${API_URL}/bookings/property/${id}`),
+      fetchJson(`${API_URL}/reviews/property/${id}?limit=6`),
     ]);
 
     setProperty(propertyData);
@@ -91,6 +93,7 @@ export default function PropertyDetailPage() {
     const pendingBookingsList = bookingData.filter((booking) => booking.status === "pending");
     setBookings(confirmedBookings);
     setPendingBookings(pendingBookingsList);
+    setPropertyReviews(Array.isArray(reviewsData?.items) ? reviewsData.items : Array.isArray(reviewsData) ? reviewsData : []);
   }, [id]);
 
   useEffect(() => {
@@ -493,7 +496,7 @@ export default function PropertyDetailPage() {
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {property.ownerHost?.firstName ? `${property.ownerHost.firstName} ${property.ownerHost.lastName || ""}` : "Verified Host"}
             </Typography>
-            {metrics.isVerified && <Chip label="Verified" size="small" color="success" />}
+            {metrics.hasPaid && <Chip label="Verified" size="small" color="success" />}
           </Box>
           {hasRating && <RatingStars value={metrics.rating} count={metrics.reviews} />}
           <Typography variant="body2" color="text.secondary">{property.city}, {property.country}</Typography>
@@ -882,25 +885,34 @@ export default function PropertyDetailPage() {
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Reviews</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Verified guest feedback builds trust.</Typography>
                 <Divider sx={{ mb: 2 }} />
-                {hasRating ? (
-                  Array.from({ length: 3 }).map((_, idx) => (
-                    <Box key={idx} sx={{ mb: 2 }}>
-                      <RatingStars value={metrics.rating} showCount={false} />
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        “Seamless stay, quick responses, and reliable check-in. Would book again.”
+                {propertyReviews.length > 0 ? (
+                  propertyReviews.map((review, idx) => (
+                    <Box key={review.id || idx} sx={{ mb: 2 }}>
+                      <RatingStars value={review.rating} showCount={false} />
+                      {review.comment ? (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          “{review.comment}”
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          Guest left a rating without written feedback.
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        {review.reviewerName || "Guest"} · {new Date(review.publishedAt || review.createdAt).toLocaleDateString()}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">Verified stay</Typography>
-                      {idx < 2 && <Divider sx={{ mt: 2 }} />}
+                      {idx < propertyReviews.length - 1 && <Divider sx={{ mt: 2 }} />}
                     </Box>
                   ))
                 ) : (
                   <Typography variant="body2" color="text.secondary">
-                    No reviews yet.
+                    {hasRating ? "No published review comments yet." : "No reviews yet."}
                   </Typography>
                 )}
               </Card>
               <Divider sx={{ mb: 2 }} />
-              <Card sx={{ p: 3, borderRadius: 3 }}>
+              {/* TODO IMPLEMENT HOST STATS FOR RESPONSE TIME */}
+              {/* <Card sx={{ p: 3, borderRadius: 3 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>Host snapshot</Typography>
                   {metrics.completionRate || metrics.responseHours ? (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -913,8 +925,9 @@ export default function PropertyDetailPage() {
                       No host stats yet.
                     </Typography>
                   )}
-                  {/* TODO <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button> */}
-              </Card>
+                    TODO IMPLIMENT VIEW HOST PROFILE (public profile with host's other listings, reviews, and about section)
+                  <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button>
+              </Card> */}
             
           </Box>
         </Grid>

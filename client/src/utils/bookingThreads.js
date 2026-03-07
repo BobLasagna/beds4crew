@@ -3,7 +3,19 @@ import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
 
-export const isArchivedBookingStatus = (status) => status === "cancelled" || status === "rejected";
+export const isArchivedBookingStatus = (bookingOrStatus) => {
+  if (typeof bookingOrStatus === "string") {
+    return ["cancelled", "rejected", "archived"].includes(bookingOrStatus);
+  }
+
+  const status = bookingOrStatus?.status;
+  if (["cancelled", "rejected", "archived"].includes(status)) {
+    return true;
+  }
+
+  const finalizationStatus = bookingOrStatus?.finalization?.status;
+  return finalizationStatus === "archived";
+};
 
 export const getLastMessageTimestamp = (booking) => {
   const messageCount = booking.messages?.length || 0;

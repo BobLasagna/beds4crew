@@ -476,6 +476,11 @@ export default function MapView({
                     <Typography variant="body2" sx={{ fontWeight: 600, color: '#2E7D32', mb: 1 }}>
                       {formatPriceDisplay(prop)}
                     </Typography>
+                    {typeof prop.rating === 'number' && typeof prop.reviewCount === 'number' && (
+                      <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                        ★ {prop.rating.toFixed(1)} ({prop.reviewCount})
+                      </Typography>
+                    )}
                     <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
                       {prop.category} • {prop.type}
                     </Typography>

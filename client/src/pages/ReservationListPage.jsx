@@ -18,6 +18,7 @@ import {
   ListItemButton,
   Paper,
   Stack,
+  CircularProgress,
   Switch,
   useMediaQuery,
 } from "@mui/material";
@@ -49,13 +50,14 @@ export default function ReservationListPage() {
   const [showPending, setShowPending] = useState(true);
   const [showConfirmed, setShowConfirmed] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   const getFilteredBookings = () =>
     bookings.filter((booking) => {
       if (!booking.property) return false;
       if (booking.status === "pending") return showPending;
       if (booking.status === "confirmed") return showConfirmed;
-      if (isArchivedBookingStatus(booking.status)) return showArchived;
+      if (isArchivedBookingStatus(booking)) return showArchived;
       return true;
     });
 
@@ -166,6 +168,36 @@ export default function ReservationListPage() {
     }
   };
 
+  const handleStartHostReview = async (bookingId) => {
+    if (!bookingId) return;
+
+    const confirmed = window.confirm("Start your follow-up review for this guest?");
+    if (!confirmed) return;
+
+    setIsFinalizing(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/bookings/${bookingId}/review/start`, {
+        method: "PUT",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data?.message || "Failed to start review");
+        return;
+      }
+
+      await loadBookings();
+      await loadBookingDetails(bookingId);
+
+      if (data?.reviewUrl) {
+        navigate(data.reviewUrl);
+      }
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedBookingId) return;
     
@@ -192,6 +224,7 @@ export default function ReservationListPage() {
       case "confirmed": return "success";
       case "cancelled": return "error";
       case "rejected": return "error";
+      case "archived": return "info";
       default: return "default";
     }
   };
@@ -215,6 +248,7 @@ export default function ReservationListPage() {
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const showListPane = !isMobile || !showMobileConversation;
   const showConversationPane = !isMobile || showMobileConversation;
+  const isMessagingDisabled = Boolean(selectedBooking?.finalization?.messagingDisabled);
 
   if (loading) {
     return <LoadingState message="Loading reservations..." />;
@@ -293,7 +327,7 @@ export default function ReservationListPage() {
                   {orderedThreads.map((bk, index) => {
                     const isSelected = selectedBookingId === bk._id;
                     const isPending = bk.status === "pending";
-                    const isArchived = bk.status === "cancelled" || bk.status === "rejected";
+                    const isArchived = isArchivedBookingStatus(bk);
                     const guestName = `${bk.guest?.firstName || ""} ${bk.guest?.lastName || ""}`.trim() || "Guest";
                     const photo = formatImageUrl(bk.property?.images?.[0]?.path || bk.property?.images?.[0] || "");
                     const lastMessageText = bk.messages?.length
@@ -463,14 +497,48 @@ export default function ReservationListPage() {
                           </Button>
                         </Stack>
                       )}
+
+                      {selectedBooking?.finalization?.guestReviewedAt && !selectedBooking?.finalization?.hostReviewedAt && (
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
+                          <Button size="small" variant="outlined" disabled={isFinalizing} onClick={() => handleStartHostReview(selectedBooking._id)}>
+                            Leave Guest Review
+                          </Button>
+                          {isFinalizing && <CircularProgress size={18} />}
+                        </Stack>
+                      )}
                     </Box>
 
                     <Box sx={{ flex: 1, overflow: "auto", p: 2 }}>
                       <Stack spacing={1.25}>
                         {selectedBooking.messages && selectedBooking.messages.length > 0 ? (
                           selectedBooking.messages.map((msg, idx) => {
+                            const isSystemMessage = msg.type === "system" || !msg.sender;
                             const isCurrentUser = msg.sender?._id === currentUser.id;
                             const profilePhotoUrl = msg.sender?.profileImagePath || "";
+
+                            if (isSystemMessage) {
+                              const systemBadgeColor = {
+                                review_set: "secondary",
+                                review_submitted: "success",
+                                archive_set: "info",
+                                cancel_set: "error",
+                              };
+
+                              return (
+                                <Box key={idx} sx={{ display: "flex", justifyContent: "center" }}>
+                                  <Stack spacing={0.5} alignItems="center" sx={{ maxWidth: { xs: "96%", sm: "80%" } }}>
+                                    <Chip
+                                      size="small"
+                                      color={systemBadgeColor[msg.action] || "default"}
+                                      label={(msg.action || "system").replace(/_/g, " ").toUpperCase()}
+                                    />
+                                    <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
+                                      {msg.text}
+                                    </Typography>
+                                  </Stack>
+                                </Box>
+                              );
+                            }
 
                             return (
                               <Box
@@ -513,7 +581,7 @@ export default function ReservationListPage() {
                     </Box>
 
                     <Divider />
-                    {selectedBooking.status !== "rejected" && selectedBooking.status !== "cancelled" ? (
+                    {selectedBooking.status !== "rejected" && selectedBooking.status !== "cancelled" && selectedBooking.status !== "archived" && !isMessagingDisabled ? (
                       <Box sx={{ p: 1.5, display: "flex", gap: 1 }}>
                         <TextField
                           fullWidth
@@ -531,7 +599,7 @@ export default function ReservationListPage() {
                       </Box>
                     ) : (
                       <Alert severity="info" sx={{ m: 1.5 }}>
-                        Messaging is disabled for {selectedBooking.status} bookings.
+                        Messaging is disabled for this reservation.
                       </Alert>
                     )}
                   </>
