@@ -31,6 +31,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth, API_URL } from '../utils/api';
 import { useSnackbar } from '../components/AppSnackbar';
+import AdminAnalyticsTab from '../components/AdminAnalyticsTab';
 import { commonStyles } from '../utils/styleConstants';
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -516,6 +517,7 @@ export default function AdminPage() {
           <Tab label="Bookings" />
           <Tab label="Reviews" />
           <Tab label="Support Tickets" />
+          <Tab label="Analytics 3D" />
         </Tabs>
 
         {/* Maintenance Actions */}
@@ -1015,6 +1017,10 @@ export default function AdminPage() {
               </Typography>
             )}
           </Box>
+        )}
+
+        {tabValue === 5 && (
+          <AdminAnalyticsTab snackbar={snackbar} />
         )}
       </Card>
 
