@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const path = require("path");
 require("dotenv").config();
 const { CSRF_COOKIE_NAME } = require("./utils/tokenHelpers");
+const analyticsMiddleware = require("./middleware/analytics");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -75,6 +76,7 @@ const corsOptions = process.env.NODE_ENV === 'production'
     };
 
 app.use(cors(corsOptions));
+app.use(analyticsMiddleware);
 
 if (AUTH_USE_HTTP_ONLY_COOKIES && AUTH_REQUIRE_CSRF) {
   app.use((req, res, next) => {
@@ -139,6 +141,12 @@ app.use("/api/billing", billingRoutes.router);
 
 const adminRoutes = require("./routes/admin");
 app.use("/api/auth/admin", adminRoutes);
+
+const analyticsRoutes = require("./routes/analytics");
+app.use("/api/auth/admin/analytics", analyticsRoutes);
+
+const publicAnalyticsRoutes = require("./routes/publicAnalytics");
+app.use("/api/analytics", publicAnalyticsRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
