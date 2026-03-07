@@ -39,7 +39,6 @@ const POPULAR_LOCATIONS = [
 const DEFAULT_LOCATION = { lat: 25.7617, lng: -80.1918 };
 const DEFAULT_RADIUS_MILES = 30;
 const RESULTS_PER_PAGE = 10;
-const CLUSTER_RADIUS_METERS = 200;
 const SORT_OPTIONS = [
   { value: 'recommended', label: 'Recommended' },
   { value: 'price-low', label: 'Price: Low to High' },
@@ -126,11 +125,6 @@ export default function BrowsePage() {
     return R * c;
   }, []);
 
-  // Calculate distance in meters
-  const calculateDistanceMeters = useCallback((lat1, lng1, lat2, lng2) => {
-    return calculateDistance(lat1, lng1, lat2, lng2) * 1609.34;
-  }, [calculateDistance]);
-
   // Filter properties within radius (only those with coordinates)
   const filteredPropertiesWithCoords = useMemo(() => {
     return allProperties.filter(p => {
@@ -145,44 +139,6 @@ export default function BrowsePage() {
   const allPropertiesForList = useMemo(() => {
     return filteredPropertiesWithCoords;
   }, [filteredPropertiesWithCoords]);
-
-  // Group properties by proximity (CLUSTER_RADIUS_METERS) - only for map
-  const groupedMarkers = useMemo(() => {
-    if (!filteredPropertiesWithCoords.length) {
-      return [];
-    }
-
-    const groups = [];
-    const visited = new Set();
-
-    for (let i = 0; i < filteredPropertiesWithCoords.length; i++) {
-      if (visited.has(i)) continue;
-
-      const prop = filteredPropertiesWithCoords[i];
-      const cluster = [prop];
-      visited.add(i);
-
-      // Find all properties within CLUSTER_RADIUS_METERS of this property
-      for (let j = i + 1; j < filteredPropertiesWithCoords.length; j++) {
-        if (visited.has(j)) continue;
-        const otherProp = filteredPropertiesWithCoords[j];
-        const dist = calculateDistanceMeters(
-          prop.latitude,
-          prop.longitude,
-          otherProp.latitude,
-          otherProp.longitude
-        );
-        if (dist <= CLUSTER_RADIUS_METERS) {
-          cluster.push(otherProp);
-          visited.add(j);
-        }
-      }
-
-      groups.push(cluster);
-    }
-
-    return groups;
-  }, [filteredPropertiesWithCoords, calculateDistanceMeters]);
 
   const totalPages = Math.ceil(totalResults / RESULTS_PER_PAGE);
   const paginatedProperties = allPropertiesForList;
@@ -638,10 +594,11 @@ export default function BrowsePage() {
           ) : filteredPropertiesWithCoords.length > 0 ? (
             <MapView
               properties={filteredPropertiesWithCoords}
-              groupedMarkers={groupedMarkers}
               center={center}
               radius={radius}
               selectedPropertyId={selectedPropertyId}
+              onMarkerSelect={(id) => setSelectedPropertyId(id)}
+              onSelectionClear={() => setSelectedPropertyId(null)}
               onPropertyClick={(id) => {
                 saveSearchState();
                 navigate(`/property/${id}`);
