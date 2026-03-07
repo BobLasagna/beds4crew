@@ -971,7 +971,7 @@ export default function PropertyDetailPage() {
                       No host stats yet.
                     </Typography>
                   )}
-                    TODO IMPLIMENT VIEW HOST PROFILE (public profile with host's other listings, reviews, and about section)
+                    TODO IMPLIMENT VIEW HOST PROFILE (public profile with host's other listings, reviews, direct message, and about section)
                   <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button>
               </Card> */}
             

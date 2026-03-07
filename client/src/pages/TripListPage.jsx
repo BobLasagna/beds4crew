@@ -31,10 +31,17 @@ import { fetchWithAuth, API_URL } from "../utils/api";
 import { formatImageUrl } from "../utils/helpers";
 import { commonStyles } from "../utils/styleConstants";
 import { isArchivedBookingStatus, sortBookingThreads } from "../utils/bookingThreads";
+import { getBooleanCookie, setBooleanCookie } from "../utils/cookies";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
+
+const FILTER_COOKIE_KEYS = {
+  showPending: "tripChatShowPending",
+  showConfirmed: "tripChatShowConfirmed",
+  showArchived: "tripChatShowArchived",
+};
 
 export default function TripListPage() {
   const theme = useTheme();
@@ -48,9 +55,9 @@ export default function TripListPage() {
   const [showMobileConversation, setShowMobileConversation] = useState(false);
   const [sortBy, setSortBy] = useState("newMessage");
   const [sortDirection, setSortDirection] = useState("asc");
-  const [showPending, setShowPending] = useState(true);
-  const [showConfirmed, setShowConfirmed] = useState(true);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showPending, setShowPending] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showPending, true));
+  const [showConfirmed, setShowConfirmed] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showConfirmed, true));
+  const [showArchived, setShowArchived] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showArchived, false));
   const [finalizeAnonymous, setFinalizeAnonymous] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
@@ -96,6 +103,12 @@ export default function TripListPage() {
       setShowMobileConversation(false);
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    setBooleanCookie(FILTER_COOKIE_KEYS.showPending, showPending);
+    setBooleanCookie(FILTER_COOKIE_KEYS.showConfirmed, showConfirmed);
+    setBooleanCookie(FILTER_COOKIE_KEYS.showArchived, showArchived);
+  }, [showPending, showConfirmed, showArchived]);
 
   const loadBookings = async () => {
     setLoading(true);

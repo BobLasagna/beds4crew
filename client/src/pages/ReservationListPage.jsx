@@ -31,10 +31,17 @@ import { fetchWithAuth, API_URL } from "../utils/api";
 import { formatImageUrl } from "../utils/helpers";
 import { commonStyles } from "../utils/styleConstants";
 import { isArchivedBookingStatus, sortBookingThreads } from "../utils/bookingThreads";
+import { getBooleanCookie, setBooleanCookie } from "../utils/cookies";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
+
+const FILTER_COOKIE_KEYS = {
+  showPending: "reservationChatShowPending",
+  showConfirmed: "reservationChatShowConfirmed",
+  showArchived: "reservationChatShowArchived",
+};
 
 export default function ReservationListPage() {
   const theme = useTheme();
@@ -47,9 +54,9 @@ export default function ReservationListPage() {
   const [sortBy, setSortBy] = useState("newMessage");
   const [sortDirection, setSortDirection] = useState("asc");
   const [showMobileConversation, setShowMobileConversation] = useState(false);
-  const [showPending, setShowPending] = useState(true);
-  const [showConfirmed, setShowConfirmed] = useState(true);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showPending, setShowPending] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showPending, true));
+  const [showConfirmed, setShowConfirmed] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showConfirmed, true));
+  const [showArchived, setShowArchived] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showArchived, false));
   const [isFinalizing, setIsFinalizing] = useState(false);
 
   const getFilteredBookings = () =>
@@ -95,6 +102,12 @@ export default function ReservationListPage() {
       setShowMobileConversation(false);
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    setBooleanCookie(FILTER_COOKIE_KEYS.showPending, showPending);
+    setBooleanCookie(FILTER_COOKIE_KEYS.showConfirmed, showConfirmed);
+    setBooleanCookie(FILTER_COOKIE_KEYS.showArchived, showArchived);
+  }, [showPending, showConfirmed, showArchived]);
 
   const loadBookings = async () => {
     setLoading(true);

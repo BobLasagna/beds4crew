@@ -263,7 +263,7 @@ export default function NavigationDrawer({ children }) {
             <ListItemButton onClick={() => (clickedIconLink("/trips"))}>
               <ListItemIcon>
                 <Badge badgeContent={unreadCount} color="error">
-                  <HotelIcon />
+                  <MessageIcon />
                 </Badge>
               </ListItemIcon>
               <ListItemText primary="Trips" />
@@ -283,7 +283,7 @@ export default function NavigationDrawer({ children }) {
             <ListItemButton onClick={() => (clickedIconLink("/reservations"))}>
               <ListItemIcon>
                 <Badge badgeContent={unreadCount} color="error">
-                  <SettingsIcon />
+                  <MessageIcon />
                 </Badge>
               </ListItemIcon>
               <ListItemText primary="Reservations" />

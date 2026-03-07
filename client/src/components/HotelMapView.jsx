@@ -499,7 +499,7 @@ export default function MapView({
                     )}
                     <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
                       <Button
-                        variant="contained"
+                        variant="outlined"
                         size="small"
                         onClick={() => onPropertyClick(prop._id)}
                         sx={{ flex: 1, textTransform: 'none', fontWeight: 600 }}
@@ -507,7 +507,7 @@ export default function MapView({
                         View Details
                       </Button>
                       <Button
-                        variant="outlined"
+                        variant="contained"
                         size="small"
                         onClick={() => onPropertyBookClick(prop._id)}
                         sx={{ flex: 1, textTransform: 'none', fontWeight: 600 }}
