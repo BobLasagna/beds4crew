@@ -695,6 +695,10 @@ export default function BrowsePage() {
                 saveSearchState();
                 navigate(`/property/${id}`);
               }}
+              onPropertyBookClick={(id) => {
+                saveSearchState();
+                navigate(`/property/${id}?scrollTo=reservation`);
+              }}
             />
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', p: 3 }}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Box, Typography, Card, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Alert, CircularProgress, MenuItem, Grid, Input, Breadcrumbs, Avatar, Divider, useMediaQuery } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
@@ -16,6 +16,7 @@ import MapView from "../components/HotelMapView";
 import MediaGallery from "../components/MediaGallery";
 import { commonStyles } from "../utils/styleConstants";
 import { formatImageUrl, getListingMetrics } from "../utils/helpers";
+import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import RatingStars from "../components/RatingStars";
 import EditIcon from "@mui/icons-material/Edit";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -64,6 +65,8 @@ export default function PropertyDetailPage() {
     valid: false
   });
   const [bookingLoading, setBookingLoading] = useState(false);
+  const reservationSectionRef = useRef(null);
+  const hasAutoScrolledToReservationRef = useRef(false);
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const location = useLocation();
@@ -129,8 +132,29 @@ export default function PropertyDetailPage() {
     }
   }, [isOwner, searchParams]);
 
+  useEffect(() => {
+    hasAutoScrolledToReservationRef.current = false;
+  }, [id]);
+
+  const scrollToReservationSection = useCallback((behavior = "smooth") => {
+    if (!reservationSectionRef.current) return;
+    scrollElementIntoViewWithOffset(reservationSectionRef.current, {
+      behavior,
+      extraOffset: 12,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!property || hasAutoScrolledToReservationRef.current) return;
+    if (searchParams.get("scrollTo") !== "reservation") return;
+
+    hasAutoScrolledToReservationRef.current = true;
+    window.requestAnimationFrame(() => {
+      scrollToReservationSection("smooth");
+    });
+  }, [property, searchParams, scrollToReservationSection]);
+
   const handleBookingSelectionChange = useCallback((selection) => {
-    console.log('PropertyDetailPage: Received booking selection from BedSelector:', selection);
     setBookingSelection(selection);
   }, []);
 
@@ -462,18 +486,39 @@ export default function PropertyDetailPage() {
 
       <Box sx={{ mb: 3 }}>
         <Box display="flex" alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between" gap={2} flexWrap="wrap">
-          {isEditing ? (
-            <TextField
-              label="Title"
-              name="title"
-              value={editForm.title || ""}
-              onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })}
-              fullWidth
-              sx={{ maxWidth: 520 }}
-            />
-          ) : (
-            <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>{property.title}</Typography>
-          )}
+          <Box sx={{ minWidth: 0, flex: "1 1 420px" }}>
+            {isEditing ? (
+              <TextField
+                label="Title"
+                name="title"
+                value={editForm.title || ""}
+                onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })}
+                fullWidth
+                sx={{ maxWidth: 520 }}
+              />
+            ) : (
+              <>
+                <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>{property.title}</Typography>
+                {!isOwner && isPropertyActive && hostHasPaid && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => scrollToReservationSection("smooth")}
+                    sx={{
+                      textTransform: "none",
+                      borderRadius: 999,
+                      px: 2,
+                      py: 0.5,
+                      fontWeight: 700,
+                      mb: 1,
+                    }}
+                  >
+                    Book now
+                  </Button>
+                )}
+              </>
+            )}
+          </Box>
           {isOwner && (
             <Button
               variant={isEditing ? "outlined" : "contained"}
@@ -634,7 +679,7 @@ export default function PropertyDetailPage() {
             </Card>
 
             <Box sx={{ position: { md: "sticky" }, top: { md: 96 } }}>
-              <Card sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+              <Card ref={reservationSectionRef} sx={{ p: 3, borderRadius: 3, mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
                   Create Reservation
                 </Typography>
@@ -875,6 +920,7 @@ export default function PropertyDetailPage() {
                       radius={1}
                       height="320px"
                       onPropertyClick={() => navigate(`/property/${property._id}`)}
+                      onPropertyBookClick={() => scrollToReservationSection("smooth")}
                     />
                   </Box>
                 ) : (

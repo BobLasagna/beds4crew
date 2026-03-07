@@ -94,6 +94,7 @@ export default function MapView({
   radius = 30,
   selectedPropertyId = null,
   onPropertyClick = () => {},
+  onPropertyBookClick = () => {},
   onMarkerSelect = () => {},
   onSelectionClear = () => {},
   height = "500px",
@@ -496,15 +497,24 @@ export default function MapView({
                         ))}
                       </Box>
                     )}
-                    <Button
-                      variant="contained"
-                      size="small"
-                      fullWidth
-                      onClick={() => onPropertyClick(prop._id)}
-                      sx={{ mt: 1 }}
-                    >
-                      View Details
-                    </Button>
+                    <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => onPropertyClick(prop._id)}
+                        sx={{ flex: 1, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        View Details
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => onPropertyBookClick(prop._id)}
+                        sx={{ flex: 1, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        Book now
+                      </Button>
+                    </Box>
                   </Box>
                 </Popup>
               </Marker>
