@@ -2,7 +2,7 @@ import { forwardRef, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link as RouterLink } from "react-router-dom";
-import { Alert, Box, Button, CircularProgress, AlertTitle, Snackbar } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, AlertTitle, Snackbar, LinearProgress } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Slide from "@mui/material/Slide";
 
@@ -83,6 +83,14 @@ function App() {
   const isNativeApp = isAppTransportMode();
   const [showCookieNotice, setShowCookieNotice] = useState(false);
   const [consentStatus, setConsentStatus] = useState(null);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullStartYRef = useRef(0);
+  const isPullingRef = useRef(false);
+  const pullRefreshCooldownRef = useRef(0);
+
+  const PULL_DISTANCE_TRIGGER = 82;
+  const PULL_DISTANCE_MAX = 120;
 
   useEffect(() => {
     if (isNativeApp) {
@@ -150,6 +158,79 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleTouchStart = (event) => {
+      if (window.scrollY > 0 || isPullRefreshing) {
+        isPullingRef.current = false;
+        return;
+      }
+
+      const firstTouch = event.touches?.[0];
+      if (!firstTouch) return;
+
+      pullStartYRef.current = firstTouch.clientY;
+      isPullingRef.current = true;
+      setPullDistance(0);
+    };
+
+    const handleTouchMove = (event) => {
+      if (!isPullingRef.current || isPullRefreshing) return;
+
+      const firstTouch = event.touches?.[0];
+      if (!firstTouch) return;
+
+      const deltaY = firstTouch.clientY - pullStartYRef.current;
+      if (deltaY <= 0) {
+        setPullDistance(0);
+        return;
+      }
+
+      const nextDistance = Math.min(PULL_DISTANCE_MAX, deltaY * 0.45);
+      setPullDistance(nextDistance);
+      if (nextDistance > 0) {
+        event.preventDefault();
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!isPullingRef.current || isPullRefreshing) {
+        setPullDistance(0);
+        return;
+      }
+
+      const triggerRefresh = pullDistance >= PULL_DISTANCE_TRIGGER;
+      isPullingRef.current = false;
+      setPullDistance(0);
+
+      if (!triggerRefresh) return;
+
+      const now = Date.now();
+      if (now - pullRefreshCooldownRef.current < 1200) {
+        return;
+      }
+
+      pullRefreshCooldownRef.current = now;
+      setIsPullRefreshing(true);
+      window.dispatchEvent(new CustomEvent("app:pull-to-refresh", { detail: { source: "gesture", at: now } }));
+
+      window.setTimeout(() => {
+        setIsPullRefreshing(false);
+      }, 900);
+    };
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [isPullRefreshing, pullDistance]);
+
   const handleDismissCookieNotice = () => {
     dismissCookieNotice();
     setShowCookieNotice(false);
@@ -195,6 +276,23 @@ function App() {
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <SnackbarProvider>
           <NavigationDrawer>
+            {(pullDistance > 0 || isPullRefreshing) && (
+              <Box
+                sx={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: (theme) => theme.zIndex.appBar - 1,
+                  px: 2,
+                  mb: 1,
+                }}
+              >
+                <LinearProgress
+                  variant={isPullRefreshing ? "indeterminate" : "determinate"}
+                  value={Math.min(100, (pullDistance / PULL_DISTANCE_TRIGGER) * 100)}
+                  sx={{ borderRadius: 999 }}
+                />
+              </Box>
+            )}
             <RouteChangeEffects />
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
