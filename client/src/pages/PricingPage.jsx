@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
   Card,
@@ -50,9 +50,39 @@ const TIERS = [
 export default function PricingPage() {
   const [selectedTier, setSelectedTier] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [highlightCheckout, setHighlightCheckout] = useState(false);
+  const checkoutCtaRef = useRef(null);
+  const highlightTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSelectTier = (tierId) => {
     setSelectedTier(tierId);
+
+    if (checkoutCtaRef.current) {
+      const ctaTop =
+        checkoutCtaRef.current.getBoundingClientRect().top + window.pageYOffset;
+      const targetY = Math.max(0, ctaTop - window.innerHeight * 0.75);
+      window.scrollTo({ top: targetY, behavior: "smooth" });
+    }
+
+    setHighlightCheckout(false);
+    requestAnimationFrame(() => {
+      setHighlightCheckout(true);
+    });
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightCheckout(false);
+    }, 1400);
   };
 
   const handleCheckout = async () => {
@@ -159,13 +189,29 @@ export default function PricingPage() {
         ))}
       </Grid>
 
-      <Box sx={{ mt: 4, textAlign: "center" }}>
+      <Box ref={checkoutCtaRef} sx={{ mt: 4, textAlign: "center" }}>
         <Button
           variant="contained"
           size="large"
           onClick={handleCheckout}
           disabled={loading}
-          sx={{ minWidth: 200 }}
+          sx={{
+            minWidth: 200,
+            transition: "transform 0.2s ease, box-shadow 0.2s ease",
+            ...(highlightCheckout && {
+              animation: "checkoutPulse 1.1s ease",
+              boxShadow: 6,
+              outline: "2px solid",
+              outlineColor: "primary.main",
+              outlineOffset: 3,
+            }),
+            "@keyframes checkoutPulse": {
+              "0%": { transform: "scale(1)" },
+              "40%": { transform: "scale(1.06)" },
+              "70%": { transform: "scale(0.98)" },
+              "100%": { transform: "scale(1)" },
+            },
+          }}
         >
           {loading ? (
             <>
