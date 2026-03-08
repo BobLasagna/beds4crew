@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { Typography, Box, Button, Paper, Divider, Switch, FormControlLabel, FormGroup, Grid, Chip, Card, CardContent, Stack, Link, Collapse, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
 import EmailIcon from "@mui/icons-material/Email";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import SupportIcon from "@mui/icons-material/SupportAgent";
 import { useNavigate, useLocation, Link as RouterLink } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
+import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import { SUPPORT_TOPIC_GROUPS, SUPPORT_TOPICS } from "../data/supportTopics";
 import supportFaqs from "../data/supportFaqs.json";
 import { hasChatFlow } from "../utils/chatFlowHelpers";
@@ -84,34 +86,14 @@ export default function SupportPage() {
     const params = new URLSearchParams({ source, slug, title });
     navigate(`/support/chat?${params.toString()}`);
   };
-  const getScrollOffset = () => {
-    const stickyElements = document.querySelectorAll("header, [role='banner'], .MuiAppBar-root");
-    let offset = 16;
-
-    stickyElements.forEach((el) => {
-      const style = window.getComputedStyle(el);
-      if (style.position === "fixed" || style.position === "sticky") {
-        offset = Math.max(offset, el.getBoundingClientRect().height + 16);
-      }
-    });
-
-    return offset;
-  };
-
   const scrollToTopic = (slug) => {
     const el = document.getElementById(`topic-${slug}`);
-    if (!el) return;
-
-    const top = window.scrollY + el.getBoundingClientRect().top - getScrollOffset();
-    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+    scrollElementIntoViewWithOffset(el, { extraOffset: 16 });
   };
 
   const scrollToFaq = (slug) => {
     const el = document.getElementById(`faq-${slug}`);
-    if (!el) return;
-
-    const top = window.scrollY + el.getBoundingClientRect().top - getScrollOffset();
-    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+    scrollElementIntoViewWithOffset(el, { extraOffset: 16 });
   };
 
   useEffect(() => {
@@ -403,7 +385,7 @@ export default function SupportPage() {
                                     component={RouterLink}
                                     to={topic.resourceLink.href}
                                     size="small"
-                                    variant="text"
+                                    variant="contained"
                                   >
                                     {topic.resourceLink.label}
                                   </Button>
@@ -418,6 +400,7 @@ export default function SupportPage() {
                                 onClick={() => openSupportChat({ slug: topic.slug, title: topic.title, source: "topic" })}
                               >
                                 Chat with Support
+                                <SupportIcon sx={{ ml: 0.5 }}/> 
                               </Button>
                             )}
                           </Stack>

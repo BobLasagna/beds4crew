@@ -1,27 +1,144 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Property = require("../models/Property");
 const Booking = require("../models/Booking");
 const Ticket = require("../models/Ticket");
+const Review = require("../models/Review");
+const cache = require("../utils/cache");
 const verifyToken = require("../middleware/auth");
+const { verifyAdmin } = require("../middleware/auth");
 const router = express.Router();
 
-const ADMIN_ID = process.env.BEDS4CREW_ADMIN_ID;;
-const ADMIN_EMAIL = process.env.BEDS4CREW_ADMIN_EMAIL;
+const publishApprovedReviewToUser = async (reviewDoc) => {
+  const booking = await Booking.findById(reviewDoc.booking).select("host guest").lean();
+  if (!booking) return;
 
-// Middleware to verify admin access
-const verifyAdmin = (req, res, next) => {
-  if (req.user.id !== ADMIN_ID || req.user.email !== ADMIN_EMAIL) {
-    return res.status(403).json({ message: "Unauthorized: Admin access required" });
+  const revieweeId = reviewDoc.reviewee?.toString();
+  const isHostReviewee = revieweeId === booking.host?.toString();
+
+  const userReviewPayload = {
+    review: reviewDoc._id,
+    booking: reviewDoc.booking,
+    reviewer: reviewDoc.reviewer,
+    rating: reviewDoc.rating,
+    comment: reviewDoc.comment || "",
+    anonymous: Boolean(reviewDoc.anonymous),
+    createdAt: reviewDoc.createdAt,
+  };
+
+  if (isHostReviewee) {
+    await User.updateOne(
+      { _id: reviewDoc.reviewee, "ownerHostReviews.review": { $ne: reviewDoc._id } },
+      { $push: { ownerHostReviews: userReviewPayload } }
+    );
+    return;
   }
-  next();
+
+  await User.updateOne(
+    { _id: reviewDoc.reviewee, "guestReviews.review": { $ne: reviewDoc._id } },
+    { $push: { guestReviews: userReviewPayload } }
+  );
+};
+
+const unpublishApprovedReviewFromUser = async (reviewDoc) => {
+  await User.updateOne(
+    { _id: reviewDoc.reviewee },
+    {
+      $pull: {
+        ownerHostReviews: { review: reviewDoc._id },
+        guestReviews: { review: reviewDoc._id },
+      },
+    }
+  );
+};
+
+const refreshPropertyReviewMetrics = async (propertyId) => {
+  if (!propertyId) return;
+
+  const normalizedPropertyId = typeof propertyId === "string"
+    ? (mongoose.Types.ObjectId.isValid(propertyId) ? new mongoose.Types.ObjectId(propertyId) : null)
+    : propertyId;
+
+  if (!normalizedPropertyId) return;
+
+  const [stats] = await Review.aggregate([
+    {
+      $match: {
+        property: normalizedPropertyId,
+        status: "approved",
+      },
+    },
+    {
+      $group: {
+        _id: "$property",
+        reviewCount: { $sum: 1 },
+        averageRating: { $avg: "$rating" },
+      },
+    },
+  ]);
+
+  const reviewCount = stats?.reviewCount || 0;
+  const rating = reviewCount > 0
+    ? Number((stats.averageRating || 0).toFixed(2))
+    : null;
+
+  const property = await Property.findByIdAndUpdate(
+    normalizedPropertyId,
+    {
+      $set: {
+        rating,
+        reviewCount,
+      },
+    },
+    { new: true }
+  )
+    .select("ownerHost")
+    .lean();
+
+  cache.delete("properties:all");
+  cache.delete(`property:${normalizedPropertyId}`);
+
+  if (property?.ownerHost) {
+    cache.delete(`properties:user:${property.ownerHost}`);
+  }
+};
+
+const parsePagination = (req) => {
+  const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+  return { hasPagination, page, limit, skip: (page - 1) * limit };
 };
 
 // Get all users
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const users = await User.find({}).select("-password").lean();
-    res.json(users);
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = User.find({})
+      .select("firstName lastName email role hasPaid isActive stripeCurrentTier listingLimit subscriptionStatus stripeSubscriptionId createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!hasPagination) {
+      const users = await query;
+      return res.json(users);
+    }
+
+    const [users, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      User.countDocuments({}),
+    ]);
+
+    return res.json({
+      items: users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch users", error: error.message });
   }
@@ -72,11 +189,6 @@ router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
 // Delete user
 router.delete("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    // Don't allow deleting the admin user
-    if (req.params.userId === ADMIN_ID) {
-      return res.status(400).json({ message: "Cannot delete admin user" });
-    }
-
     const user = await User.findByIdAndDelete(req.params.userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -91,10 +203,32 @@ router.delete("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
 // Get all properties (admin view)
 router.get("/properties", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const properties = await Property.find({})
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Property.find({})
+      .select("title description pricePerNight maxGuests category status city country ownerHost createdAt")
       .populate("ownerHost", "firstName lastName email hasPaid")
+      .sort({ createdAt: -1 })
       .lean();
-    res.json(properties);
+
+    if (!hasPagination) {
+      const properties = await query;
+      return res.json(properties);
+    }
+
+    const [properties, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Property.countDocuments({}),
+    ]);
+
+    return res.json({
+      items: properties,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch properties", error: error.message });
   }
@@ -143,13 +277,34 @@ router.delete("/properties/:propertyId", verifyToken, verifyAdmin, async (req, r
 // Get all bookings (admin view)
 router.get("/bookings", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const bookings = await Booking.find({})
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Booking.find({})
+      .select("property guest host startDate endDate totalPrice status unreadByGuest unreadByHost createdAt")
       .populate("guest", "firstName lastName email")
       .populate("host", "firstName lastName email")
       .populate("property", "title city country")
       .sort({ createdAt: -1 })
       .lean();
-    res.json(bookings);
+
+    if (!hasPagination) {
+      const bookings = await query;
+      return res.json(bookings);
+    }
+
+    const [bookings, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Booking.countDocuments({}),
+    ]);
+
+    return res.json({
+      items: bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
   }
@@ -272,6 +427,109 @@ router.delete("/tickets", verifyToken, verifyAdmin, async (req, res) => {
     res.json({ message: "Tickets deleted successfully", deletedCount: deleteResult.deletedCount || 0 });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete tickets", error: error.message });
+  }
+});
+
+// Get reviews for moderation (default: pending)
+router.get("/reviews", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || "pending").toLowerCase();
+    const allowedStatuses = ["pending", "approved", "rejected"];
+    const statusFilter = allowedStatuses.includes(status) ? status : "pending";
+
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Review.find({ status: statusFilter })
+      .populate("reviewer", "firstName lastName email")
+      .populate("reviewee", "firstName lastName email")
+      .populate("property", "title")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!hasPagination) {
+      const reviews = await query;
+      return res.json(reviews);
+    }
+
+    const [reviews, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Review.countDocuments({ status: statusFilter }),
+    ]);
+
+    return res.json({
+      items: reviews,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch reviews", error: error.message });
+  }
+});
+
+// Approve review and publish to user review fields
+router.put("/reviews/:reviewId/approve", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { notes } = req.body || {};
+    const review = await Review.findById(req.params.reviewId);
+
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    if (review.status === "approved") {
+      await refreshPropertyReviewMetrics(review.property);
+      return res.json({ message: "Review already approved", review });
+    }
+
+    review.status = "approved";
+    review.publishedAt = new Date();
+    review.moderation = {
+      reviewedBy: req.user.id,
+      reviewedAt: new Date(),
+      notes: String(notes || "").trim(),
+    };
+    await review.save();
+
+    await publishApprovedReviewToUser(review);
+    await refreshPropertyReviewMetrics(review.property);
+
+    return res.json({ message: "Review approved and published", review });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to approve review", error: error.message });
+  }
+});
+
+// Reject review (not published)
+router.put("/reviews/:reviewId/reject", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { notes } = req.body || {};
+    const review = await Review.findById(req.params.reviewId);
+
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    const wasApproved = review.status === "approved";
+    review.status = "rejected";
+    review.publishedAt = null;
+    review.moderation = {
+      reviewedBy: req.user.id,
+      reviewedAt: new Date(),
+      notes: String(notes || "").trim(),
+    };
+    await review.save();
+
+    if (wasApproved) {
+      await unpublishApprovedReviewFromUser(review);
+      await refreshPropertyReviewMetrics(review.property);
+    }
+
+    return res.json({ message: "Review rejected", review });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to reject review", error: error.message });
   }
 });
 

@@ -381,16 +381,16 @@ export const SUPPORT_RESOURCE_CONTENT = {
     ]
   },
   "cookie-policy": {
-    overview: "The cookie policy explains usage categories and how consent preferences are handled.",
+    overview: "Welcome to the Cookie Console: a friendly map of what each cookie does, why it exists, and which optional signals are currently switched on.",
     highlights: [
-      "Cookies can support authentication, analytics, and product improvement.",
-      "Preference choices may affect parts of the user experience.",
-      "Policy documentation is the source of truth for categories and purpose."
+      "Essential cookies run core account safety and sign-in flows.",
+      "Optional analytics cookies only run when consent rules allow them.",
+      "This page can show environment-backed cookie and capture status in real time."
     ],
     nextSteps: [
-      "Review cookie categories and purpose definitions.",
-      "Adjust preferences where controls are available.",
-      "Reach out if you need help with policy interpretation."
+      "Scan the live cookie lineup and check what is currently active.",
+      "Use the cookie banner controls to allow or deny optional analytics.",
+      "Contact support if you want a walkthrough of any cookie category."
     ],
     solutionLinks: [
       { label: "Cookie Policy", href: "/cookie-policy" },

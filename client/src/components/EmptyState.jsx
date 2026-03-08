@@ -78,7 +78,19 @@ export function NoWishlist() {
   return (
     <EmptyState
       icon={FavoriteBorderIcon}
-      title="Your wishlist is empty"
+      title="Your favorites are empty"
+      description="Start adding properties you love to keep track of them for future bookings."
+      actionLabel="Explore Properties"
+      actionHref="/properties"
+    />
+  );
+}
+
+export function NoFavorites() {
+  return (
+    <EmptyState
+      icon={FavoriteBorderIcon}
+      title="Your favorites are empty"
       description="Start adding properties you love to keep track of them for future bookings."
       actionLabel="Explore Properties"
       actionHref="/properties"

@@ -31,18 +31,16 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth, API_URL } from '../utils/api';
 import { useSnackbar } from '../components/AppSnackbar';
+import AdminAnalyticsTab from '../components/AdminAnalyticsTab';
 import { commonStyles } from '../utils/styleConstants';
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
-const ADMIN_ID = '698c112bbc6f9ffd822acf3c';
-const ADMIN_EMAIL = 'r.papagna@gmail.com';
 
 export default function AdminPage() {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
-  const [currentUser, setCurrentUser] = useState(null);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tabValue, setTabValue] = useState(0);
@@ -83,19 +81,36 @@ export default function AdminPage() {
   const [ticketsTotal, setTicketsTotal] = useState(0);
   const [selectedTicketIds, setSelectedTicketIds] = useState([]);
 
+  // Reviews moderation state
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsPage, setReviewsPage] = useState(0);
+  const [reviewsRowsPerPage, setReviewsRowsPerPage] = useState(10);
+
   // Check authorization and fetch data
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        setCurrentUser(user);
+        const meResponse = await fetchWithAuth(`${API_URL}/auth/me`);
+        if (!meResponse.ok) {
+          throw new Error('Unable to verify admin session');
+        }
+        const meData = await meResponse.json();
+        const user = {
+          ...(JSON.parse(localStorage.getItem('user') || '{}')),
+          ...(meData || {}),
+          id: meData?._id || meData?.id,
+          isAdmin: !!meData?.isAdmin,
+        };
+        localStorage.setItem('user', JSON.stringify(user));
 
-        if (user.id === ADMIN_ID && user.email === ADMIN_EMAIL) {
+        if (user.isAdmin) {
           setAuthorized(true);
           fetchUsers();
           fetchListings();
           fetchBookings();
           fetchTickets(1, ticketsRowsPerPage);
+          fetchReviews();
         } else {
           setAuthorized(false);
           snackbar('Unauthorized: Admin access denied', 'error');
@@ -125,6 +140,10 @@ export default function AdminPage() {
     setBookingsPage(0);
   }, [bookings.length]);
 
+  useEffect(() => {
+    setReviewsPage(0);
+  }, [reviews.length]);
+
   const paginatedUsers = users.slice(
     usersPage * usersRowsPerPage,
     usersPage * usersRowsPerPage + usersRowsPerPage
@@ -138,6 +157,11 @@ export default function AdminPage() {
   const paginatedBookings = bookings.slice(
     bookingsPage * bookingsRowsPerPage,
     bookingsPage * bookingsRowsPerPage + bookingsRowsPerPage
+  );
+
+  const paginatedReviews = reviews.slice(
+    reviewsPage * reviewsRowsPerPage,
+    reviewsPage * reviewsRowsPerPage + reviewsRowsPerPage
   );
 
   const fetchUsers = async () => {
@@ -204,6 +228,21 @@ export default function AdminPage() {
     }
   };
 
+  const fetchReviews = async () => {
+    setReviewsLoading(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/auth/admin/reviews?status=pending`);
+      if (!res.ok) throw new Error('Failed to fetch reviews');
+      const data = await res.json();
+      setReviews(Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []));
+    } catch (err) {
+      console.error('Error fetching reviews:', err);
+      snackbar('Failed to load pending reviews', 'error');
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
   const handleToggleTicket = (ticketId) => {
     setSelectedTicketIds((prev) =>
       prev.includes(ticketId)
@@ -245,6 +284,23 @@ export default function AdminPage() {
     } catch (err) {
       console.error('Error deleting tickets:', err);
       snackbar('Failed to delete tickets', 'error');
+    }
+  };
+
+  const handleApproveReview = async (reviewId) => {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/auth/admin/reviews/${reviewId}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) throw new Error('Failed to approve review');
+      snackbar('Review approved successfully', 'success');
+      setReviews((prev) => prev.filter((review) => review._id !== reviewId));
+    } catch (err) {
+      console.error('Error approving review:', err);
+      snackbar('Failed to approve review', 'error');
     }
   };
 
@@ -459,7 +515,9 @@ export default function AdminPage() {
           <Tab label="Users" />
           <Tab label="Listings" />
           <Tab label="Bookings" />
+          <Tab label="Reviews" />
           <Tab label="Support Tickets" />
+          <Tab label="Analytics 3D" />
         </Tabs>
 
         {/* Maintenance Actions */}
@@ -521,8 +579,6 @@ export default function AdminPage() {
                     <TableBody>
                       {paginatedUsers.map(user => {
                         const isAccountActive = user.isActive !== false;
-                        const subStatus = user.subscriptionStatus || '';
-                        const hasStripe = Boolean(user.stripeCustomerId);
                         
                         let displayLabel = isAccountActive ? 'Active' : 'Inactive';
                         let displayColor = isAccountActive ? 'success' : 'error';
@@ -757,8 +813,112 @@ export default function AdminPage() {
           </Box>
         )}
 
-        {/* Support Tickets Tab */}
+        {/* Reviews Tab */}
         {tabValue === 3 && (
+          <Box sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">Pending Reviews ({reviews.length})</Typography>
+              <Button variant="outlined" onClick={fetchReviews} disabled={reviewsLoading}>
+                {reviewsLoading ? <CircularProgress size={24} /> : 'Refresh'}
+              </Button>
+            </Box>
+
+            {reviewsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : reviews.length > 0 ? (
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.100' }}>
+                        <TableCell><strong>Submitted</strong></TableCell>
+                        <TableCell><strong>Property</strong></TableCell>
+                        <TableCell><strong>Reviewer</strong></TableCell>
+                        <TableCell><strong>Reviewee</strong></TableCell>
+                        <TableCell><strong>Rating</strong></TableCell>
+                        <TableCell><strong>Comment</strong></TableCell>
+                        <TableCell><strong>Actions</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedReviews.map((review) => (
+                        <TableRow key={review._id}>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {dayjs.utc(review.createdAt).format('M/D/YYYY h:mm A')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{review.property?.title || 'Property'}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {review.anonymous
+                                ? 'Anonymous'
+                                : `${review.reviewer?.firstName || ''} ${review.reviewer?.lastName || ''}`.trim() || 'User'}
+                            </Typography>
+                            {!review.anonymous && (
+                              <Typography variant="caption" color="text.secondary">
+                                {review.reviewer?.email || ''}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {`${review.reviewee?.firstName || ''} ${review.reviewee?.lastName || ''}`.trim() || 'User'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {review.reviewee?.email || ''}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={`${review.rating}/5`} size="small" color="primary" variant="outlined" />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ maxWidth: 360 }}>
+                              {review.comment || 'No comment'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              onClick={() => handleApproveReview(review._id)}
+                            >
+                              Approve
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <TablePagination
+                  component="div"
+                  count={reviews.length}
+                  page={reviewsPage}
+                  onPageChange={(_, nextPage) => setReviewsPage(nextPage)}
+                  rowsPerPage={reviewsRowsPerPage}
+                  onRowsPerPageChange={(event) => {
+                    const nextRows = parseInt(event.target.value, 10);
+                    setReviewsRowsPerPage(nextRows);
+                    setReviewsPage(0);
+                  }}
+                  rowsPerPageOptions={[5, 10, 25, 50]}
+                />
+              </>
+            ) : (
+              <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                No pending reviews found
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Support Tickets Tab */}
+        {tabValue === 4 && (
           <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
               <Typography variant="h6">Support Tickets ({ticketsTotal})</Typography>
@@ -857,6 +1017,10 @@ export default function AdminPage() {
               </Typography>
             )}
           </Box>
+        )}
+
+        {tabValue === 5 && (
+          <AdminAnalyticsTab snackbar={snackbar} />
         )}
       </Card>
 

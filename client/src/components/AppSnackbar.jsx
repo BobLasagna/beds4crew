@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Snackbar, Alert } from "@mui/material";
+import { notificationService } from "../utils/notificationService";
 
 const SnackbarContext = createContext(null);
+const DEFAULT_DURATION = 2800;
+
 
 export function useSnackbar() {
   const context = useContext(SnackbarContext);
@@ -15,10 +19,14 @@ export function SnackbarProvider({ children }) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [severity, setSeverity] = useState("success");
+  const [duration, setDuration] = useState(DEFAULT_DURATION);
+  const [action, setAction] = useState(null);
 
-  const triggerSnackbar = (message, sev = "success") => {
+  const triggerSnackbar = (message, sev = "success", options = {}) => {
     setMsg(message);
     setSeverity(sev);
+    setDuration(options?.duration ?? DEFAULT_DURATION);
+    setAction(options?.action ?? null);
     setOpen(true);
   };
 
@@ -27,14 +35,25 @@ export function SnackbarProvider({ children }) {
     setOpen(false);
   };
 
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribeSnackbar(({ message, severity: eventSeverity, options }) => {
+      triggerSnackbar(message, eventSeverity, options);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   return (
     <SnackbarContext.Provider value={triggerSnackbar}>
       {children}
       <Snackbar
         open={open}
-        autoHideDuration={2800}
+        autoHideDuration={duration}
         onClose={handleClose}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        action={action}
       >
         <Alert onClose={handleClose} severity={severity} sx={{ width: "100%" }}>
           {msg}

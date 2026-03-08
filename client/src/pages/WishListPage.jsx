@@ -2,9 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Box, Typography, Grid } from "@mui/material";
 import { useLocation } from "react-router-dom";
 import PropertyCard from "../components/PropertyCard";
-import { LoadingState, NoWishlist } from "../components/EmptyState";
+import { LoadingState, NoFavorites } from "../components/EmptyState";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, API_URL } from "../utils/api";
+import { fetchJsonWithAuth, fetchWithAuth, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 
 export default function WishListPage() {
@@ -17,18 +17,8 @@ export default function WishListPage() {
     async function fetchWishlist() {
       setLoading(true);
       try {
-        const userRes = await fetchWithAuth(`${API_URL}/auth/me`);
-        const user = await userRes.json();
-        if (!user.wishList?.length) {
-          setProperties([]);
-          return;
-        }
-        const props = await Promise.all(
-          user.wishList.map(pid =>
-            fetch(`${API_URL}/properties/${pid}`).then(r => r.json())
-          )
-        );
-        setProperties(props.filter(Boolean));
+        const summary = await fetchJsonWithAuth(`${API_URL}/users/wishlist/summary`);
+        setProperties(Array.isArray(summary) ? summary : []);
       } finally {
         setLoading(false);
       }
@@ -37,23 +27,23 @@ export default function WishListPage() {
   }, [location.pathname]);
 
   const handleRemove = async (propId) => {
-    const res = await fetchWithAuth(`${API_URL}/properties/${propId}/wishlist`, {
+    const res = await fetchWithAuth(`${API_URL}/users/wishlist/${propId}`, {
       method: "DELETE"
     });
     if (res.ok) {
       setProperties(prev => prev.filter(p => p._id !== propId));
-      snackbar("Property removed from wishlist", "info");
+      snackbar("Property removed from favorites", "info");
     }
   };
 
   if (loading) {
-    return <LoadingState message="Loading wishlist..." />;
+    return <LoadingState message="Loading favorites..." />;
   }
 
   return (
     <Box sx={commonStyles.contentContainer}>
       <Typography variant="h4" sx={commonStyles.pageTitle}>
-        My Wishlist
+        My Favorites
       </Typography>
       
       {properties.length > 0 ? (
@@ -70,7 +60,7 @@ export default function WishListPage() {
           ))}
         </Grid>
       ) : (
-        <NoWishlist />
+        <NoFavorites />
       )}
     </Box>
   );

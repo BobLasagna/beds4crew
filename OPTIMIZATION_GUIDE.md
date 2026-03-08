@@ -1,5 +1,17 @@
 # Property Rental Platform - Optimized Architecture
 
+## 2026-03 Additional Optimizations
+
+### Server Hot Paths
+- **Date Finder Query Strategy**: replaced per-property booking lookups with a batched booking query grouped by property ID.
+- **Heavy Admin Endpoints**: added optional pagination + projection for `/api/auth/admin/users`, `/api/auth/admin/properties`, `/api/auth/admin/bookings`.
+- **Booking List Endpoints**: added optional pagination + projection for `/api/bookings/guest` and `/api/bookings/host`.
+
+### Client Data Loading
+- **Wishlist N+1 Removed**: `WishListPage` now uses `GET /api/users/wishlist/summary` instead of loading each property individually.
+- **API Drift Reduced**: consolidated raw fetch usage in core pages to shared API helpers (`fetchJson`, `fetchJsonWithAuth`, `fetchWithAuth`).
+- **Thread Logic Reuse**: extracted shared booking thread sorting/status logic into `client/src/utils/bookingThreads.js`.
+
 ## 🚀 Performance Optimizations Implemented
 
 ### Backend Optimizations

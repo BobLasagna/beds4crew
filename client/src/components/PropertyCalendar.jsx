@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Box, Typography, Paper, Grid, Tooltip } from "@mui/material";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import { CALENDAR_COLORS } from "../utils/styleConstants";
 
 dayjs.extend(utc);
 
@@ -214,31 +215,31 @@ export default function PropertyCalendar({
       
       <Box sx={{ display: "flex", gap: 1, mb: 2, alignItems: "center", flexWrap: "wrap" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Box sx={{ width: 20, height: 20, bgcolor: "#4caf50", borderRadius: 1 }} />
+          <Box sx={{ width: 20, height: 20, bgcolor: CALENDAR_COLORS.free, borderRadius: 1 }} />
           <Typography variant="caption">All Beds Free</Typography>
         </Box>
         {property && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Box sx={{ width: 20, height: 20, bgcolor: "#ffeb3b", borderRadius: 1 }} />
+            <Box sx={{ width: 20, height: 20, bgcolor: CALENDAR_COLORS.partial, borderRadius: 1 }} />
             <Typography variant="caption">Some Beds Available</Typography>
           </Box>
         )}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Box sx={{ width: 20, height: 20, bgcolor: "#2196f3", borderRadius: 1 }} />
+          <Box sx={{ width: 20, height: 20, bgcolor: CALENDAR_COLORS.pending, borderRadius: 1 }} />
           <Typography variant="caption">Pending Request</Typography>
         </Box>
         {isOwner && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Box sx={{ width: 20, height: 20, bgcolor: "#ff9800", borderRadius: 1 }} />
+            <Box sx={{ width: 20, height: 20, bgcolor: CALENDAR_COLORS.blocked, borderRadius: 1 }} />
             <Typography variant="caption">Blocked</Typography>
           </Box>
         )}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Box sx={{ width: 20, height: 20, bgcolor: "#f44336", borderRadius: 1 }} />
+          <Box sx={{ width: 20, height: 20, bgcolor: CALENDAR_COLORS.booked, borderRadius: 1 }} />
           <Typography variant="caption">{isOwner ? "All Beds Booked" : "Fully Booked"}</Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Box sx={{ width: 20, height: 20, bgcolor: "#e0e0e0", borderRadius: 1 }} />
+          <Box sx={{ width: 20, height: 20, bgcolor: CALENDAR_COLORS.past, borderRadius: 1 }} />
           <Typography variant="caption">Past</Typography>
         </Box>
       </Box>
@@ -334,27 +335,27 @@ export default function PropertyCalendar({
                           borderRadius: 1,
                           bgcolor: day
                             ? day.isPast
-                              ? "#e0e0e0"
+                              ? CALENDAR_COLORS.past
                               : day.isBlocked && isOwner
-                              ? "#ff9800"
+                              ? CALENDAR_COLORS.blocked
                               : isFullyBooked || (day.isBlocked && !isOwner)
-                              ? "#f44336"
+                              ? CALENDAR_COLORS.booked
                               : isMixedPendingAndPartial
                               ? "transparent"
                               : isPendingOnly
-                              ? "#2196f3"
+                              ? CALENDAR_COLORS.pending
                               : isPartiallyBooked
-                              ? "#ffeb3b"
-                              : "#4caf50"
+                              ? CALENDAR_COLORS.partial
+                              : CALENDAR_COLORS.free
                             : "transparent",
                           background: day && isMixedPendingAndPartial
-                            ? "linear-gradient(135deg, #2196f3 0%, #2196f3 50%, #ffeb3b 50%, #ffeb3b 100%)"
+                            ? `linear-gradient(135deg, ${CALENDAR_COLORS.pending} 0%, ${CALENDAR_COLORS.pending} 50%, ${CALENDAR_COLORS.partial} 50%, ${CALENDAR_COLORS.partial} 100%)`
                             : undefined,
                           color: day ? (
                             day.isPast 
-                              ? "#757575" 
+                              ? CALENDAR_COLORS.mutedText
                               : isPendingOnly || isPartiallyBooked || isMixedPendingAndPartial
-                              ? "#000" 
+                              ? CALENDAR_COLORS.contrastText
                               : "white"
                           ) : "transparent",
                           fontSize: { xs: "0.7rem", sm: "0.8rem" },

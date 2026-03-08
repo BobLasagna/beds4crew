@@ -1,14 +1,55 @@
 const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
+const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
 const path = require("path");
 require("dotenv").config();
+const { CSRF_COOKIE_NAME } = require("./utils/tokenHelpers");
+const analyticsMiddleware = require("./middleware/analytics");
 
 const app = express();
+app.set("trust proxy", 1);
+
+const AUTH_USE_HTTP_ONLY_COOKIES = process.env.AUTH_USE_HTTP_ONLY_COOKIES !== "false";
+const AUTH_REQUIRE_CSRF = process.env.AUTH_REQUIRE_CSRF !== "false";
+const CLIENT_URL = process.env.CLIENT_URL;
+
+const stateChangingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const csrfExemptPaths = new Set([
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/refresh",
+  "/api/auth/logout",
+  "/api/auth/csrf",
+  "/api/auth/password/request-reset",
+  "/api/auth/password/confirm-reset",
+  "/api/billing/webhook",
+]);
+
+const rateLimitBuckets = new Map();
+
+const createRateLimiter = ({ windowMs, max, keyPrefix }) => (req, res, next) => {
+  const key = `${keyPrefix}:${req.ip}`;
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || now > bucket.resetAt) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return next();
+  }
+
+  if (bucket.count >= max) {
+    return res.status(429).json({ message: "Too many requests. Please try again shortly." });
+  }
+
+  bucket.count += 1;
+  next();
+};
 
 // Middleware
 app.use(compression()); // Compress all responses
+app.use(cookieParser());
 
 // Stripe webhook must receive raw body
 const billingRoutes = require("./routes/billing");
@@ -20,22 +61,70 @@ app.post(
 
 app.use(express.json({ limit: "10mb" })); // Add size limit
 
-// Configure CORS based on environment
-const corsOptions = process.env.NODE_ENV === 'production'
-  ? {
-      // Production: Allow same-origin requests (no CORS needed since API and client are on same domain)
-      origin: false, // Disable CORS since we're serving from same origin
-      credentials: true
-    }
-  : {
-      // Development: Allow all origins for local network testing
-      origin: true,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
-    };
+const defaultAllowedOrigins = [
+  "http://localhost:5173",
+  "capacitor://localhost",
+  "ionic://localhost",
+];
+
+const configuredClientOrigins = CLIENT_URL
+  ? CLIENT_URL.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : [];
+
+const allowedOrigins = [...new Set([...configuredClientOrigins, ...defaultAllowedOrigins])];
+
+const corsOriginValidator = (origin, callback) => {
+  if (!origin) {
+    return callback(null, true);
+  }
+
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+
+  return callback(new Error(`CORS blocked for origin: ${origin}`));
+};
+
+// Configure CORS for web + native app wrapper origins
+const corsOptions = {
+  origin: corsOriginValidator,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Mode']
+};
 
 app.use(cors(corsOptions));
+app.use(analyticsMiddleware);
+
+if (AUTH_USE_HTTP_ONLY_COOKIES && AUTH_REQUIRE_CSRF) {
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api/")) {
+      return next();
+    }
+
+    if (!stateChangingMethods.has(req.method)) {
+      return next();
+    }
+
+    if (csrfExemptPaths.has(req.path)) {
+      return next();
+    }
+
+    const csrfCookie = req.cookies?.[CSRF_COOKIE_NAME];
+    const csrfHeader = req.headers["x-csrf-token"];
+
+    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+      return res.status(403).json({ message: "CSRF validation failed" });
+    }
+
+    next();
+  });
+}
+
+app.use("/api/auth", createRateLimiter({ windowMs: 60 * 1000, max: 20, keyPrefix: "auth" }));
+app.use("/api/geocoding", createRateLimiter({ windowMs: 60 * 1000, max: 30, keyPrefix: "geocoding" }));
 
 // Serve uploaded files
 app.use(express.static("public"));
@@ -53,6 +142,9 @@ app.use("/api/properties", propertyRoutes);
 const bookingRoutes = require("./routes/booking");
 app.use("/api/bookings", bookingRoutes);
 
+const reviewRoutes = require("./routes/review");
+app.use("/api/reviews", reviewRoutes);
+
 const userRoutes = require("./routes/user");
 app.use("/api/users", userRoutes);
 
@@ -62,6 +154,9 @@ app.use('/api/geocoding', geocodingRouter);
 const emailPreferencesRoutes = require("./routes/emailPreferences");
 app.use("/api/email-preferences", emailPreferencesRoutes);
 
+const notificationsRoutes = require("./routes/notifications");
+app.use("/api/notifications", notificationsRoutes);
+
 const ticketRoutes = require("./routes/tickets");
 app.use("/api/tickets", ticketRoutes);
 
@@ -70,6 +165,12 @@ app.use("/api/billing", billingRoutes.router);
 const adminRoutes = require("./routes/admin");
 app.use("/api/auth/admin", adminRoutes);
 
+const analyticsRoutes = require("./routes/analytics");
+app.use("/api/auth/admin/analytics", analyticsRoutes);
+
+const publicAnalyticsRoutes = require("./routes/publicAnalytics");
+app.use("/api/analytics", publicAnalyticsRoutes);
+
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   const health = {
@@ -77,6 +178,10 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || "development",
+    auth: {
+      cookieMode: AUTH_USE_HTTP_ONLY_COOKIES,
+      csrfRequired: AUTH_REQUIRE_CSRF,
+    },
     checks: {
       database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
       stripe: !!(
@@ -172,11 +277,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Network URL: http://<your-ip>:${PORT}`);
   console.log(`💡 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`💡 MongoDB: ${mongoURL ? 'Configured' : '❌ NOT CONFIGURED'}`);
+  console.log(`🔐 Cookie auth mode: ${AUTH_USE_HTTP_ONLY_COOKIES ? 'enabled' : 'disabled'}`);
+  console.log(`🛡️  CSRF enforcement: ${AUTH_REQUIRE_CSRF ? 'enabled' : 'disabled'}`);
   
   // Validate critical environment variables
   const criticalVars = {
     'JWT_SECRET': process.env.JWT_SECRET,
-    'REFRESH_TOKEN_SECRET': process.env.REFRESH_TOKEN_SECRET,
+    'JWT_REFRESH_SECRET': process.env.JWT_REFRESH_SECRET || process.env.REFRESH_TOKEN_SECRET,
     'MONGO_URL': process.env.MONGO_URL
   };
   

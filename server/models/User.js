@@ -18,6 +18,34 @@ const UserSchema = new mongoose.Schema(
     wishList:       { type: [mongoose.Schema.Types.ObjectId], ref: "Property", default: [] },
     propertyList:   { type: [mongoose.Schema.Types.ObjectId], ref: "Property", default: [] },
     reservationList:{ type: [mongoose.Schema.Types.ObjectId], ref: "Booking", default: [] },
+    ownerHostReviews: {
+      type: [
+        {
+          review: { type: mongoose.Schema.Types.ObjectId, ref: "Review", required: true },
+          booking: { type: mongoose.Schema.Types.ObjectId, ref: "Booking", required: true },
+          reviewer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+          rating: { type: Number, min: 1, max: 5, required: true },
+          comment: { type: String, default: "" },
+          anonymous: { type: Boolean, default: false },
+          createdAt: { type: Date, default: Date.now }
+        }
+      ],
+      default: []
+    },
+    guestReviews: {
+      type: [
+        {
+          review: { type: mongoose.Schema.Types.ObjectId, ref: "Review", required: true },
+          booking: { type: mongoose.Schema.Types.ObjectId, ref: "Booking", required: true },
+          reviewer: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+          rating: { type: Number, min: 1, max: 5, required: true },
+          comment: { type: String, default: "" },
+          anonymous: { type: Boolean, default: false },
+          createdAt: { type: Date, default: Date.now }
+        }
+      ],
+      default: []
+    },
     // wishList:       [{ type: mongoose.Schema.Types.ObjectId, ref: "Property" }],
 
     
@@ -43,6 +71,33 @@ const UserSchema = new mongoose.Schema(
       newMessage: { type: Boolean, default: true },
       welcomeEmail: { type: Boolean, default: true }
       // Note: Password reset and email verification are always sent
+    },
+
+    // App + in-app notification preferences (kept separate from email preferences)
+    notificationPreferences: {
+      inAppEnabled: { type: Boolean, default: true },
+      pushEnabled: { type: Boolean, default: true },
+      bookingConfirmation: { type: Boolean, default: true },
+      bookingCancellation: { type: Boolean, default: true },
+      newBookingRequest: { type: Boolean, default: true },
+      newMessage: { type: Boolean, default: true },
+      marketingUpdates: { type: Boolean, default: true }
+    },
+
+    // App push tokens bound to user devices
+    pushTokens: {
+      type: [
+        {
+          token: { type: String, required: true },
+          platform: { type: String, enum: ["ios", "android", "web"], required: true },
+          provider: { type: String, enum: ["fcm", "apns", "expo", "unknown"], default: "unknown" },
+          deviceId: { type: String, default: "" },
+          appVersion: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now },
+          lastSeenAt: { type: Date, default: Date.now }
+        }
+      ],
+      default: []
     }
   },
   { timestamps: true }

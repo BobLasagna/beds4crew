@@ -39,6 +39,8 @@ const PropertySchema = new mongoose.Schema(
     longitude: { type: Number, required: false },
     status: { type: String, enum: ["active", "inactive"], default: "inactive" }, // Property starts inactive, host activates after setup
     inactiveReason: { type: String, enum: ["listing_limit"], required: false },
+    rating: { type: Number, min: 1, max: 5, default: null, index: true },
+    reviewCount: { type: Number, default: 0 },
     // Host-defined unavailable periods
     blockedPeriods: [
       {

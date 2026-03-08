@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from 'react-leaflet';
-import { Box, Typography, Button, List, ListItem } from '@mui/material';
+import { Box, Typography, Button, Chip } from '@mui/material';
 import { formatPriceDisplay } from '../utils/api';
+import { MAP_COLORS } from '../utils/styleConstants';
+import { getClusterRadiusMetersAtZoom, groupPropertiesByDistance } from '../utils/mapClustering';
 import L from 'leaflet';
 
 // Import Leaflet CSS - this ensures it's bundled correctly
@@ -35,12 +37,22 @@ function MapUpdater({ center }) {
   return null;
 }
 
+function MapZoomTracker({ onZoomChange }) {
+  useMapEvents({
+    zoomend: (event) => {
+      onZoomChange(event.target.getZoom());
+    },
+  });
+
+  return null;
+}
+
 // Custom icon for cluster markers
 const createClusterIcon = (count) => {
   const html = `
     <div style="
-      background-color: #FF6B6B;
-      color: white;
+      background-color: ${MAP_COLORS.clusterBg};
+      color: ${MAP_COLORS.clusterText};
       border-radius: 50%;
       width: 40px;
       height: 40px;
@@ -82,16 +94,47 @@ export default function MapView({
   radius = 30,
   selectedPropertyId = null,
   onPropertyClick = () => {},
+  onPropertyBookClick = () => {},
+  onMarkerSelect = () => {},
+  onSelectionClear = () => {},
   height = "500px",
 }) {
   const [expandedCluster, setExpandedCluster] = useState(null);
   const [mapActive, setMapActive] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState(10);
   const markerRefs = useRef({});
   const mapRef = useRef(null);
+  const selectAfterZoomTimeoutRef = useRef(null);
+  const previousSelectedPropertyIdRef = useRef(null);
+  const LOWER_MIDDLE_THIRD_Y_RATIO = 0.68;
+
+  useEffect(() => {
+    return () => {
+      if (selectAfterZoomTimeoutRef.current) {
+        clearTimeout(selectAfterZoomTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const mappableProperties = useMemo(() => {
+    const sourceProperties = properties.length > 0 ? properties : groupedMarkers.flat();
+    return sourceProperties.filter((prop) => prop?.latitude && prop?.longitude);
+  }, [properties, groupedMarkers]);
+
+  const clusterRadiusMeters = useMemo(() => {
+    return getClusterRadiusMetersAtZoom({
+      zoom: currentZoom,
+      latitude: center?.lat,
+    });
+  }, [currentZoom, center]);
+
+  const resolvedGroupedMarkers = useMemo(() => {
+    return groupPropertiesByDistance(mappableProperties, clusterRadiusMeters);
+  }, [mappableProperties, clusterRadiusMeters]);
 
   const markerKeyByPropertyId = useMemo(() => {
     const map = {};
-    groupedMarkers.forEach((group, groupIdx) => {
+    resolvedGroupedMarkers.forEach((group, groupIdx) => {
       if (!group || group.length === 0) return;
       const markerKey = group.length === 1 ? `single-${group[0]._id}` : `cluster-${groupIdx}`;
       group.forEach((prop) => {
@@ -101,15 +144,40 @@ export default function MapView({
       });
     });
     return map;
-  }, [groupedMarkers]);
+  }, [resolvedGroupedMarkers]);
 
   useEffect(() => {
-    if (!selectedPropertyId) return;
+    if (!selectedPropertyId) {
+      previousSelectedPropertyIdRef.current = null;
+      return;
+    }
+
     const key = markerKeyByPropertyId[selectedPropertyId];
     const marker = key ? markerRefs.current[key] : null;
-    if (marker && typeof marker.openPopup === 'function') {
+
+    if (!marker || typeof marker.openPopup !== 'function') return;
+
+    const selectedPropertyChanged = previousSelectedPropertyIdRef.current !== selectedPropertyId;
+    const popupAlreadyOpen = typeof marker.isPopupOpen === 'function' && marker.isPopupOpen();
+
+    if (selectedPropertyChanged || !popupAlreadyOpen) {
       marker.openPopup();
     }
+
+    const map = mapRef.current;
+    const markerLatLng = typeof marker.getLatLng === 'function' ? marker.getLatLng() : null;
+    if (map && markerLatLng) {
+      const zoomLevel = map.getZoom();
+      const markerPoint = map.latLngToContainerPoint(markerLatLng);
+      const mapSize = map.getSize();
+      const targetPoint = L.point(mapSize.x / 2, mapSize.y * LOWER_MIDDLE_THIRD_Y_RATIO);
+      const delta = markerPoint.subtract(targetPoint);
+      const currentCenterPoint = map.project(map.getCenter(), zoomLevel);
+      const nextCenter = map.unproject(currentCenterPoint.add(delta), zoomLevel);
+      map.panTo(nextCenter, { animate: true, duration: 0.8 });
+    }
+
+    previousSelectedPropertyIdRef.current = selectedPropertyId;
   }, [selectedPropertyId, markerKeyByPropertyId]);
 
   // Force Leaflet to always use light theme - prevent dark mode interference
@@ -130,8 +198,8 @@ export default function MapView({
         opacity: 1 !important;
       }
       .leaflet-container {
-        background: #ffffff !important;
-        color: #000000 !important;
+        background: ${MAP_COLORS.popupBg} !important;
+        color: ${MAP_COLORS.popupText} !important;
       }
       .leaflet-tile-pane {
         filter: none !important;
@@ -143,12 +211,12 @@ export default function MapView({
       }
       .leaflet-popup-content-wrapper,
       .leaflet-popup-tip {
-        background-color: #ffffff !important;
-        color: #000000 !important;
+        background-color: ${MAP_COLORS.popupBg} !important;
+        color: ${MAP_COLORS.popupText} !important;
         box-shadow: 0 3px 14px rgba(0,0,0,0.4) !important;
       }
       .leaflet-popup-content {
-        color: #000000 !important;
+        color: ${MAP_COLORS.popupText} !important;
       }
       .leaflet-popup-content p,
       .leaflet-popup-content div,
@@ -194,6 +262,39 @@ export default function MapView({
     if (mapRef.current) {
       mapRef.current.flyTo(mapCenter, 10, { duration: 1.5 });
     }
+  };
+
+  const panPinToLowerMiddleThird = (lat, lng, targetZoom = null) => {
+    const map = mapRef.current;
+    if (!map || typeof lat !== 'number' || typeof lng !== 'number') return;
+
+    const boundedZoom = targetZoom === null
+      ? map.getZoom()
+      : Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), targetZoom));
+
+    const markerLatLng = L.latLng(lat, lng);
+    const projectZoom = boundedZoom;
+    const mapSize = map.getSize();
+    const targetPoint = L.point(mapSize.x / 2, mapSize.y * LOWER_MIDDLE_THIRD_Y_RATIO);
+    const markerProjectedPoint = map.project(markerLatLng, projectZoom);
+    const nextCenterPoint = markerProjectedPoint.subtract(targetPoint.subtract(L.point(mapSize.x / 2, mapSize.y / 2)));
+    const nextCenter = map.unproject(nextCenterPoint, projectZoom);
+
+    map.flyTo(nextCenter, boundedZoom, { duration: 0.8 });
+  };
+
+  const focusPropertyAfterZoom = (prop) => {
+    if (!prop?.latitude || !prop?.longitude || !prop?._id) return;
+
+    panPinToLowerMiddleThird(prop.latitude, prop.longitude, mapRef.current?.getMaxZoom?.() ?? 14);
+
+    if (selectAfterZoomTimeoutRef.current) {
+      clearTimeout(selectAfterZoomTimeoutRef.current);
+    }
+
+    selectAfterZoomTimeoutRef.current = setTimeout(() => {
+      onMarkerSelect(prop._id);
+    }, 900);
   };
 
   const handleActivateMap = () => {
@@ -315,11 +416,12 @@ export default function MapView({
       >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         maxZoom={14}
       />
 
       <MapUpdater center={center} />
+      <MapZoomTracker onZoomChange={setCurrentZoom} />
 
       {/* Semi-transparent search radius circle */}
       <Circle
@@ -335,8 +437,8 @@ export default function MapView({
       />
 
       {/* Render grouped markers */}
-      {groupedMarkers && groupedMarkers.length > 0 ? (
-        groupedMarkers.map((group, groupIdx) => {
+      {resolvedGroupedMarkers && resolvedGroupedMarkers.length > 0 ? (
+        resolvedGroupedMarkers.map((group, groupIdx) => {
           if (!group || group.length === 0) return null;
           
           if (group.length === 1) {
@@ -351,11 +453,20 @@ export default function MapView({
                 key={`single-${prop._id}`}
                 position={position}
                 icon={createMarkerIcon()}
+                eventHandlers={{
+                  click: () => {
+                    panPinToLowerMiddleThird(prop.latitude, prop.longitude);
+                  },
+                  popupclose: () => {
+                    onSelectionClear();
+                    previousSelectedPropertyIdRef.current = null;
+                  },
+                }}
                 ref={(ref) => {
                   markerRefs.current[`single-${prop._id}`] = ref;
                 }}
               >
-                <Popup closeButton={true}>
+                <Popup closeButton={true} autoPan={false}>
                   <Box sx={{ minWidth: '220px' }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
                       {prop.title}
@@ -366,18 +477,44 @@ export default function MapView({
                     <Typography variant="body2" sx={{ fontWeight: 600, color: '#2E7D32', mb: 1 }}>
                       {formatPriceDisplay(prop)}
                     </Typography>
+                    {typeof prop.rating === 'number' && typeof prop.reviewCount === 'number' && (
+                      <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                        ★ {prop.rating.toFixed(1)} ({prop.reviewCount})
+                      </Typography>
+                    )}
                     <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
                       {prop.category} • {prop.type}
                     </Typography>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      fullWidth
-                      onClick={() => onPropertyClick(prop._id)}
-                      sx={{ mt: 1 }}
-                    >
-                      View Details
-                    </Button>
+                    {Array.isArray(prop.facilities) && prop.facilities.length > 0 && (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                        {prop.facilities.slice(0, 4).map((facility) => (
+                          <Chip
+                            key={`${prop._id}-${facility}`}
+                            label={facility}
+                            size="small"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    )}
+                    <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => onPropertyClick(prop._id)}
+                        sx={{ flex: 1, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        View Details
+                      </Button>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => onPropertyBookClick(prop._id)}
+                        sx={{ flex: 1, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        Book now
+                      </Button>
+                    </Box>
                   </Box>
                 </Popup>
               </Marker>
@@ -394,56 +531,49 @@ export default function MapView({
                 key={`cluster-${groupIdx}`}
                 position={position}
                 icon={createClusterIcon(group.length)}
+                eventHandlers={{
+                  popupclose: () => {
+                    onSelectionClear();
+                    previousSelectedPropertyIdRef.current = null;
+                  },
+                }}
                 ref={(ref) => {
                   markerRefs.current[`cluster-${groupIdx}`] = ref;
                 }}
               >
-                <Popup closeButton={true}>
-                  <Box sx={{ minWidth: '280px', maxHeight: '400px', overflowY: 'auto' }}>
+                <Popup closeButton={true} autoPan={false}>
+                  <Box sx={{ minWidth: '220px' }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                      {group.length} properties in this area
+                      {group.length} places to stay in this area
                     </Typography>
-                    <List sx={{ p: 0 }}>
-                      {group.map((prop, idx) => (
-                        <ListItem
-                          key={prop._id}
-                          sx={{
-                            p: 1,
-                            mb: 1,
-                            bgcolor: '#f5f5f5',
-                            borderRadius: '4px',
-                            flexDirection: 'column',
-                            alignItems: 'flex-start',
-                          }}
-                        >
-                          <Box sx={{ width: '100%' }}>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                              {prop.title}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 0.5 }}>
-                              {prop.address}
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 600, color: '#2E7D32', mb: 0.5 }}
-                            >
-                              {formatPriceDisplay(prop)}
-                            </Typography>
-                            <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                              {prop.category} • {prop.type}
-                            </Typography>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => onPropertyClick(prop._id)}
-                              sx={{ mt: 0.5, width: '100%' }}
-                            >
-                              View
-                            </Button>
-                          </Box>
-                        </ListItem>
-                      ))}
-                    </List>
+                    {group.slice(0, 3).map((prop) => (
+                      <Button
+                        key={prop._id}
+                        variant="text"
+                        size="small"
+                        onClick={() => focusPropertyAfterZoom(prop)}
+                        sx={{
+                          display: 'flex',
+                          width: '100%',
+                          justifyContent: 'flex-start',
+                          textAlign: 'left',
+                          textTransform: 'none',
+                          px: 0,
+                          minWidth: '100%',
+                          mb: 0.25,
+                        }}
+                      >
+                        {prop.title}
+                      </Button>
+                    ))}
+                    {group.length > 3 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        +{group.length - 3} more
+                      </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Zoom in for individual property details.
+                    </Typography>
                   </Box>
                 </Popup>
               </Marker>

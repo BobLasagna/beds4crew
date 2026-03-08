@@ -2,6 +2,7 @@ const User = require("../models/User");
 const express = require("express");
 const Property = require("../models/Property");
 const verifyToken = require("../middleware/auth");
+const { verifyAdmin } = require("../middleware/auth");
 const cache = require("../utils/cache");
 const { geocodeAddress } = require("../utils/geocoding");
 const { uploadMultiple } = require("../utils/fileUpload");
@@ -130,6 +131,7 @@ router.get("/", async (req, res) => {
       category,
       type,
       ownerId,
+      facilities,
       minPrice,
       maxPrice,
       minRating,
@@ -146,6 +148,7 @@ router.get("/", async (req, res) => {
       category !== undefined ||
       type !== undefined ||
       ownerId !== undefined ||
+      facilities !== undefined ||
       minPrice !== undefined ||
       maxPrice !== undefined ||
       minRating !== undefined ||
@@ -159,6 +162,12 @@ router.get("/", async (req, res) => {
     const minPriceNum = minPrice !== undefined ? parseFloat(minPrice) : null;
     const maxPriceNum = maxPrice !== undefined ? parseFloat(maxPrice) : null;
     const minRatingNum = minRating !== undefined ? parseFloat(minRating) : null;
+    const facilityFilters = facilities
+      ? String(facilities)
+          .split(",")
+          .map((value) => sanitizeInput(value).trim())
+          .filter(Boolean)
+      : [];
 
     const normalizeSort = () => {
       if (sort === "price-low" || sort === "priceLow") return "priceLow";
@@ -186,11 +195,24 @@ router.get("/", async (req, res) => {
     };
 
     const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const tokenizeQuery = (value = "") =>
+      String(value)
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+    const isVerifiedHostIntent = /\b(verified|trusted)\b/.test(normalizedQuery) && /\bhost(s)?\b/.test(normalizedQuery);
+    const isNearAirportIntent = /\b(near\s+airports?|airport(s)?|layover|terminal)\b/.test(normalizedQuery);
 
     const baseQuery = { status: "active" };
     if (category) baseQuery.category = category;
     if (type) baseQuery.type = type;
     if (ownerId) baseQuery.ownerHost = ownerId;
+    if (facilityFilters.length > 0) {
+      baseQuery.facilities = { $all: facilityFilters };
+    }
     if (Number.isFinite(minPriceNum) || Number.isFinite(maxPriceNum)) {
       baseQuery.pricePerNight = {};
       if (Number.isFinite(minPriceNum)) baseQuery.pricePerNight.$gte = minPriceNum;
@@ -203,18 +225,45 @@ router.get("/", async (req, res) => {
       baseQuery.latitude = { $exists: true, $ne: null };
       baseQuery.longitude = { $exists: true, $ne: null };
     }
+
+    if (isVerifiedHostIntent) {
+      const verifiedHostIds = (await User.find({ hasPaid: true }).select("_id").lean()).map((host) => host._id);
+      if (ownerId) {
+        baseQuery.ownerHost = verifiedHostIds.some((id) => String(id) === String(ownerId))
+          ? ownerId
+          : { $in: [] };
+      } else {
+        baseQuery.ownerHost = { $in: verifiedHostIds };
+      }
+    }
+
     if (query && String(query).trim()) {
-      const term = escapeRegex(String(query).trim());
-      const regex = new RegExp(term, "i");
-      baseQuery.$or = [
-        { title: regex },
-        { address: regex },
-        { category: regex },
-        { type: regex },
-        { description: regex },
-        { city: regex },
-        { country: regex },
-      ];
+      const stopWords = new Set(["a", "an", "and", "the", "for", "in", "on", "at", "to", "of", "with", "near"]);
+      const intentWords = new Set(["verified", "trusted", "host", "hosts", "airport", "airports", "layover", "terminal"]);
+      const rawTokens = tokenizeQuery(query);
+      const filteredTokens = rawTokens.filter((token) => token.length > 1 && !stopWords.has(token) && !intentWords.has(token));
+
+      const regexPool = [];
+      if (!isVerifiedHostIntent && !isNearAirportIntent) {
+        regexPool.push(new RegExp(escapeRegex(String(query).trim()), "i"));
+      }
+
+      filteredTokens.forEach((token) => {
+        regexPool.push(new RegExp(escapeRegex(token), "i"));
+      });
+
+      if (isNearAirportIntent) {
+        ["airport", "terminal", "flight", "layover", "shuttle"].forEach((keyword) => {
+          regexPool.push(new RegExp(escapeRegex(keyword), "i"));
+        });
+      }
+
+      const textFields = ["title", "address", "category", "type", "description", "city", "country", "facilities"];
+      const orConditions = regexPool.flatMap((regex) => textFields.map((field) => ({ [field]: regex })));
+
+      if (orConditions.length > 0) {
+        baseQuery.$or = orConditions;
+      }
     }
 
     if (hasGeoFilter) {
@@ -406,6 +455,24 @@ router.get("/date-finder", async (req, res) => {
     
     // Check availability for each property
     const Booking = require("../models/Booking");
+    const propertyIds = propertiesInRadius.map((property) => property._id);
+    const overlappingBookings = await Booking.find({
+      property: { $in: propertyIds },
+      status: "confirmed",
+      startDate: { $lte: end },
+      endDate: { $gte: start },
+    })
+      .select("property bookedBeds")
+      .lean();
+
+    const bookingsByProperty = new Map();
+    overlappingBookings.forEach((booking) => {
+      const propertyKey = String(booking.property);
+      const current = bookingsByProperty.get(propertyKey) || [];
+      current.push(booking);
+      bookingsByProperty.set(propertyKey, current);
+    });
+
     const availableProperties = [];
     
     for (const property of propertiesInRadius) {
@@ -417,13 +484,7 @@ router.get("/date-finder", async (req, res) => {
         continue;
       }
       
-      // Get all confirmed bookings that overlap with the date range
-      const overlappingBookings = await Booking.find({
-        property: property._id,
-        status: "confirmed",
-        startDate: { $lte: end },
-        endDate: { $gte: start }
-      }).lean();
+      const propertyBookings = bookingsByProperty.get(String(property._id)) || [];
       
       // console.log(`  📅 ${overlappingBookings.length} overlapping bookings`);
       
@@ -471,7 +532,7 @@ router.get("/date-finder", async (req, res) => {
           }
           
           // Check if bed is booked
-          const bedBooked = overlappingBookings.some(booking => {
+          const bedBooked = propertyBookings.some(booking => {
             return booking.bookedBeds?.some(bookedBed => 
               bookedBed.roomIndex === roomIndex && bookedBed.bedIndex === bedIndex
             );
@@ -547,7 +608,7 @@ router.get("/date-finder", async (req, res) => {
     });
   } catch (error) {
     console.error('Date finder error:', error);
-    res.status(500).json({ message: "Failed to search properties", error: error.message });
+    res.status(500).json({ message: "Failed to search properties" });
   }
 });
 
@@ -798,7 +859,7 @@ router.post("/:id/images", verifyToken, uploadMultiple, async (req, res) => {
 });
 
 // Clear all property caches (admin/debug endpoint)
-router.post("/admin/clear-cache", async (req, res) => {
+router.post("/admin/clear-cache", verifyToken, verifyAdmin, async (req, res) => {
   try {
     cache.clear();
     res.json({ message: "All caches cleared successfully" });

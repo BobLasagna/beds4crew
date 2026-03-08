@@ -101,15 +101,13 @@ export const getListingMetrics = (property = {}) => {
   const reviews = typeof property.reviewCount === "number" ? property.reviewCount : null;
   const responseHours = typeof property.ownerHost?.responseHours === "number" ? property.ownerHost.responseHours : null;
   const completionRate = typeof property.ownerHost?.completionRate === "number" ? property.ownerHost.completionRate : null;
-  const sellerLevel = property.ownerHost?.sellerLevel || null;
-  const isVerified = property.ownerHost?.isVerified ?? null;
+  const hasPaid = property.ownerHost?.hasPaid ?? null;
 
   return {
     rating,
     reviews,
     responseHours,
     completionRate,
-    sellerLevel,
-    isVerified,
+    hasPaid,
   };
 };

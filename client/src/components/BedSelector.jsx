@@ -106,7 +106,6 @@ export default function BedSelector({ property, startDate, endDate, onSelectionC
         totalPrice: totalPrice,
         valid: guestCount > 0 && guestCount <= property.maxGuests
       };
-      console.log('BedSelector: Sending simple pricing selection to parent:', selection);
       onSelectionChange(selection);
     } else {
       // Per-bed booking
@@ -128,11 +127,6 @@ export default function BedSelector({ property, startDate, endDate, onSelectionC
         totalPrice: totalPrice,
         valid: selectedBeds.length > 0 && allGuestsAssigned
       };
-      console.log('BedSelector: Sending per-bed selection to parent:', {
-        ...selection,
-        selectedBeds: selectedBeds,
-        assignments: guestBedAssignments
-      });
       onSelectionChange(selection);
     }
   }, [selectedBeds, guestCount, guestBedAssignments, totalPrice, useSimplePricing, property, availableBeds, onSelectionChange]);

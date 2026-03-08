@@ -19,6 +19,7 @@ import {
   ListItemButton,
   Paper,
   Stack,
+  CircularProgress,
   useMediaQuery,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -29,10 +30,18 @@ import { LoadingState, NoTrips } from "../components/EmptyState";
 import { fetchWithAuth, API_URL } from "../utils/api";
 import { formatImageUrl } from "../utils/helpers";
 import { commonStyles } from "../utils/styleConstants";
+import { isArchivedBookingStatus, sortBookingThreads } from "../utils/bookingThreads";
+import { getBooleanCookie, setBooleanCookie } from "../utils/cookies";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
+
+const FILTER_COOKIE_KEYS = {
+  showPending: "tripChatShowPending",
+  showConfirmed: "tripChatShowConfirmed",
+  showArchived: "tripChatShowArchived",
+};
 
 export default function TripListPage() {
   const theme = useTheme();
@@ -46,56 +55,22 @@ export default function TripListPage() {
   const [showMobileConversation, setShowMobileConversation] = useState(false);
   const [sortBy, setSortBy] = useState("newMessage");
   const [sortDirection, setSortDirection] = useState("asc");
-  const [showPending, setShowPending] = useState(true);
-  const [showConfirmed, setShowConfirmed] = useState(true);
-  const [showArchived, setShowArchived] = useState(false);
-
-  const isArchivedStatus = (status) => status === "cancelled" || status === "rejected";
-
-  const getLastMessageTimestamp = (booking) => {
-    const messageCount = booking.messages?.length || 0;
-    if (messageCount > 0) {
-      const timestamp = booking.messages[messageCount - 1]?.timestamp;
-      if (timestamp) return new Date(timestamp).getTime();
-    }
-    return dayjs.utc(booking.startDate).valueOf();
-  };
+  const [showPending, setShowPending] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showPending, true));
+  const [showConfirmed, setShowConfirmed] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showConfirmed, true));
+  const [showArchived, setShowArchived] = useState(() => getBooleanCookie(FILTER_COOKIE_KEYS.showArchived, false));
+  const [finalizeAnonymous, setFinalizeAnonymous] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   const getFilteredBookings = () =>
     bookings.filter((booking) => {
       if (booking.status === "pending") return showPending;
       if (booking.status === "confirmed") return showConfirmed;
-      if (isArchivedStatus(booking.status)) return showArchived;
+      if (isArchivedBookingStatus(booking)) return showArchived;
       return true;
     });
 
   const getSortedBookings = (list) => {
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      let compareA;
-      let compareB;
-
-      switch (sortBy) {
-        case "property":
-          compareA = (a.property?.title || "").toLowerCase();
-          compareB = (b.property?.title || "").toLowerCase();
-          break;
-        case "date":
-          compareA = dayjs.utc(a.startDate).valueOf();
-          compareB = dayjs.utc(b.startDate).valueOf();
-          break;
-        case "newMessage":
-        default:
-          compareA = `${a.unreadByGuest ? "0" : "1"}-${String(9999999999999 - getLastMessageTimestamp(a)).padStart(13, "0")}`;
-          compareB = `${b.unreadByGuest ? "0" : "1"}-${String(9999999999999 - getLastMessageTimestamp(b)).padStart(13, "0")}`;
-          break;
-      }
-
-      if (compareA < compareB) return sortDirection === "asc" ? -1 : 1;
-      if (compareA > compareB) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
-    return sorted;
+    return sortBookingThreads(list, { sortBy, sortDirection, unreadKey: "unreadByGuest" });
   };
 
   useEffect(() => {
@@ -128,6 +103,12 @@ export default function TripListPage() {
       setShowMobileConversation(false);
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    setBooleanCookie(FILTER_COOKIE_KEYS.showPending, showPending);
+    setBooleanCookie(FILTER_COOKIE_KEYS.showConfirmed, showConfirmed);
+    setBooleanCookie(FILTER_COOKIE_KEYS.showArchived, showArchived);
+  }, [showPending, showConfirmed, showArchived]);
 
   const loadBookings = async () => {
     setLoading(true);
@@ -198,12 +179,46 @@ export default function TripListPage() {
     await loadBookings();
   };
 
+  const handleStartReview = async (bookingId) => {
+    if (!bookingId) return;
+
+    const confirmed = window.confirm(
+      "Submit a review for this reservation? Messaging will stay open until your review is submitted."
+    );
+    if (!confirmed) return;
+
+    setIsFinalizing(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/bookings/${bookingId}/review/start`, {
+        method: "PUT",
+        body: JSON.stringify({ anonymous: finalizeAnonymous }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data?.message || "Failed to start review");
+        return;
+      }
+
+      await loadBookings();
+      await loadBookingDetails(bookingId);
+
+      if (data?.reviewUrl) {
+        navigate(data.reviewUrl);
+      }
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case "pending": return "warning";
       case "confirmed": return "success";
       case "cancelled": return "error";
       case "rejected": return "error";
+      case "archived": return "info";
       default: return "default";
     }
   };
@@ -217,12 +232,12 @@ export default function TripListPage() {
     }
   };
 
-  const activeBookings = bookings.filter((bk) => bk.status === "pending" || bk.status === "confirmed");
-  const archivedBookings = bookings.filter((bk) => isArchivedStatus(bk.status));
+  const archivedBookings = bookings.filter((bk) => isArchivedBookingStatus(bk));
   const orderedThreads = getSortedBookings(getFilteredBookings());
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const showListPane = !isMobile || !showMobileConversation;
   const showConversationPane = !isMobile || showMobileConversation;
+  const isMessagingDisabled = Boolean(selectedBooking?.finalization?.messagingDisabled);
 
   if (loading) {
     return <LoadingState message="Loading your trips..." />;
@@ -298,7 +313,7 @@ export default function TripListPage() {
               <List sx={{ height: { xs: "calc(100% - 185px)", md: 620 }, overflow: "auto", p: 0 }}>
                 {orderedThreads.map((bk, index) => {
                   const isSelected = selectedBookingId === bk._id;
-                  const isArchived = bk.status === "cancelled" || bk.status === "rejected";
+                  const isArchived = isArchivedBookingStatus(bk);
                   const threadDate = `${dayjs.utc(bk.startDate).format("M/D/YYYY")} – ${dayjs.utc(bk.endDate).format("M/D/YYYY")}`;
                   const photo = formatImageUrl(bk.property?.images?.[0]?.path || bk.property?.images?.[0] || "");
                   const lastMessageText = bk.messages?.length
@@ -435,7 +450,7 @@ export default function TripListPage() {
                       </Stack>
                     </Stack>
 
-                    {(selectedBooking.status === "pending" || selectedBooking.status === "confirmed") && (
+                    {selectedBooking.status === "pending" && (
                       <Button
                         size="small"
                         color="error"
@@ -446,14 +461,63 @@ export default function TripListPage() {
                         Cancel Booking
                       </Button>
                     )}
+
+                    {selectedBooking.status === "confirmed" && !selectedBooking?.finalization?.guestReviewedAt && (
+                      <Stack spacing={1} sx={{ mt: 1.5 }}>
+                        <Alert severity="warning">
+                          Once you submit your review, messaging will be disabled.
+                        </Alert>
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "flex-start", sm: "center" }}>
+                          <FormControlLabel
+                            control={<Switch size="small" checked={finalizeAnonymous} onChange={(e) => setFinalizeAnonymous(e.target.checked)} />}
+                            label={<Typography variant="caption">Anonymous review</Typography>}
+                          />
+                          <Button size="small" variant="outlined" disabled={isFinalizing} onClick={() => handleStartReview(selectedBooking._id)}>
+                            Leave Review
+                          </Button>
+                          {isFinalizing && <CircularProgress size={18} />}
+                        </Stack>
+                      </Stack>
+                    )}
+
+                    {selectedBooking?.finalization?.guestReviewedAt && (
+                      <Alert severity="info" sx={{ mt: 1.5 }}>
+                        Reservation archived after review. Messaging is disabled.
+                      </Alert>
+                    )}
                   </Box>
 
                   <Box sx={{ flex: 1, overflow: "auto", p: 2 }}>
                     <Stack spacing={1.25}>
                       {selectedBooking.messages && selectedBooking.messages.length > 0 ? (
                         selectedBooking.messages.map((msg, idx) => {
+                          const isSystemMessage = msg.type === "system" || !msg.sender;
                           const isCurrentUser = msg.sender?._id === currentUser.id;
                           const profilePhotoUrl = msg.sender?.profileImagePath || "";
+
+                          if (isSystemMessage) {
+                            const systemBadgeColor = {
+                              review_set: "secondary",
+                              review_submitted: "success",
+                              archive_set: "info",
+                              cancel_set: "error",
+                            };
+
+                            return (
+                              <Box key={idx} sx={{ display: "flex", justifyContent: "center" }}>
+                                <Stack spacing={0.5} alignItems="center" sx={{ maxWidth: { xs: "96%", sm: "80%" } }}>
+                                  <Chip
+                                    size="small"
+                                    color={systemBadgeColor[msg.action] || "default"}
+                                    label={(msg.action || "system").replace(/_/g, " ").toUpperCase()}
+                                  />
+                                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
+                                    {msg.text}
+                                  </Typography>
+                                </Stack>
+                              </Box>
+                            );
+                          }
 
                           return (
                             <Box
@@ -498,7 +562,7 @@ export default function TripListPage() {
                   </Box>
 
                   <Divider />
-                  {selectedBooking.status !== "rejected" && selectedBooking.status !== "cancelled" ? (
+                  {selectedBooking.status !== "rejected" && selectedBooking.status !== "cancelled" && selectedBooking.status !== "archived" && !isMessagingDisabled ? (
                     <Box sx={{ p: 1.5, display: "flex", gap: 1 }}>
                       <TextField
                         fullWidth
@@ -516,7 +580,7 @@ export default function TripListPage() {
                     </Box>
                   ) : (
                     <Alert severity="info" sx={{ m: 1.5 }}>
-                      Messaging is disabled for {selectedBooking.status} bookings.
+                      Messaging is disabled for this reservation.
                     </Alert>
                   )}
                 </>

@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const Booking = require("../models/Booking");
 const Property = require("../models/Property");
 const User = require("../models/User");
@@ -7,6 +8,132 @@ const { validateDateRange } = require("../utils/validation");
 const emailService = require("../utils/emailService");
 
 const router = express.Router();
+
+const parsePagination = (req) => {
+  const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+  return { hasPagination, page, limit, skip: (page - 1) * limit };
+};
+
+const formatDateForMessage = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value || "");
+
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+};
+
+const buildInitialBookingMessage = ({ bookedBeds, startDate, endDate }) => {
+  const startLabel = formatDateForMessage(startDate);
+  const endLabel = formatDateForMessage(endDate);
+  const hasBeds = Array.isArray(bookedBeds) && bookedBeds.length > 0;
+
+  if (!hasBeds) {
+    return `I would like to book this property from ${startLabel} to ${endLabel}.`;
+  }
+
+  const labels = bookedBeds
+    .map((bed) => bed?.bedLabel)
+    .filter(Boolean);
+
+  if (labels.length === 1) {
+    return `I would like to book your ${labels[0]} from ${startLabel} to ${endLabel}.`;
+  }
+
+  return `I would like to book these beds from ${startLabel} to ${endLabel}.`;
+};
+
+const markUnreadForOtherParty = (booking, actorId) => {
+  if (booking.guest.toString() === actorId) {
+    booking.unreadByHost = true;
+    booking.unreadByGuest = false;
+  } else {
+    booking.unreadByGuest = true;
+    booking.unreadByHost = false;
+  }
+};
+
+const pushSystemMessage = (booking, { text, action, badge = "info", anonymous = false }) => {
+  booking.messages.push({
+    text,
+    timestamp: new Date(),
+    read: false,
+    type: "system",
+    badge,
+    action,
+    anonymous,
+  });
+};
+
+const startReviewFlow = async ({ booking, userId, anonymous }) => {
+  const isGuest = booking.guest.toString() === userId || booking.guest?._id?.toString() === userId;
+  const isHost = booking.host.toString() === userId || booking.host?._id?.toString() === userId;
+
+  if (!isGuest && !isHost) {
+    return { error: { status: 403, message: "Unauthorized" } };
+  }
+
+  const guestReviewed = Boolean(booking.finalization?.guestReviewedAt);
+  const hostReviewed = Boolean(booking.finalization?.hostReviewedAt);
+
+  if (isGuest) {
+    if (booking.status !== "confirmed") {
+      return { error: { status: 400, message: "Guest review can only start on confirmed bookings" } };
+    }
+    if (guestReviewed) {
+      return { error: { status: 400, message: "Guest review has already been submitted" } };
+    }
+  }
+
+  if (isHost) {
+    if (!guestReviewed) {
+      return { error: { status: 400, message: "Host review is available only after guest review" } };
+    }
+    if (hostReviewed) {
+      return { error: { status: 400, message: "Host review has already been submitted" } };
+    }
+  }
+
+  const reviewToken = crypto.randomBytes(32).toString("hex");
+  const reviewTokenHash = crypto.createHash("sha256").update(reviewToken).digest("hex");
+  const reviewTokenExpiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+  const isAnonymous = isGuest ? Boolean(anonymous) : false;
+
+  booking.finalization = {
+    ...(booking.finalization || {}),
+    status: isGuest ? "review_set" : booking.finalization?.status || "archived",
+    selectedBy: userId,
+    selectedAt: new Date(),
+    anonymous: isGuest ? isAnonymous : Boolean(booking.finalization?.anonymous),
+    reviewTokenHash,
+    reviewTokenExpiresAt,
+  };
+
+  if (isGuest && !isAnonymous) {
+    pushSystemMessage(booking, {
+      text: "System: Reservation review set.",
+      action: "review_set",
+      badge: "secondary",
+      anonymous: false,
+    });
+
+    markUnreadForOtherParty(booking, userId);
+  }
+
+  await booking.save();
+
+  return {
+    reviewToken,
+    reviewUrl: `/review/${reviewToken}`,
+    booking,
+    message: "Review flow started",
+  };
+};
 
 // Create a new booking (guest only) - starts as "pending"
 router.post("/", verifyToken, async (req, res) => {
@@ -81,6 +208,12 @@ router.post("/", verifyToken, async (req, res) => {
     }
 
     // Create booking with pending status
+    const initialMessageText = buildInitialBookingMessage({
+      bookedBeds,
+      startDate,
+      endDate,
+    });
+
     const booking = new Booking({
       property: propertyId,
       guest: req.user.id,
@@ -89,7 +222,18 @@ router.post("/", verifyToken, async (req, res) => {
       endDate, 
       totalPrice: finalPrice,
       status: "pending",
-      bookedBeds: bookedBeds || []
+      bookedBeds: bookedBeds || [],
+      messages: [
+        {
+          sender: req.user.id,
+          text: initialMessageText,
+          timestamp: new Date(),
+          read: false,
+          type: "user",
+        },
+      ],
+      unreadByHost: true,
+      unreadByGuest: false,
     });
     await booking.save();
     
@@ -139,11 +283,32 @@ router.post("/", verifyToken, async (req, res) => {
 // Get all bookings for the user (guest's trip list)
 router.get("/guest", verifyToken, async (req, res) => {
   try {
-    const bookings = await Booking.find({ guest: req.user.id })
-      .populate("property host")
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Booking.find({ guest: req.user.id })
+      .populate("property", "title city country images status")
+      .populate("host", "firstName lastName email profileImagePath")
       .sort("-createdAt")
       .lean();
-    res.json(bookings);
+
+    if (!hasPagination) {
+      const bookings = await query;
+      return res.json(bookings);
+    }
+
+    const [bookings, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Booking.countDocuments({ guest: req.user.id }),
+    ]);
+
+    return res.json({
+      items: bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
   }
@@ -152,11 +317,32 @@ router.get("/guest", verifyToken, async (req, res) => {
 // Get all bookings for host's properties (host-only)
 router.get("/host", verifyToken, async (req, res) => {
   try {
-    const bookings = await Booking.find({ host: req.user.id })
-      .populate("property guest")
+    const { hasPagination, page, limit, skip } = parsePagination(req);
+    const query = Booking.find({ host: req.user.id })
+      .populate("property", "title city country images status")
+      .populate("guest", "firstName lastName email profileImagePath")
       .sort("-createdAt")
       .lean();
-    res.json(bookings);
+
+    if (!hasPagination) {
+      const bookings = await query;
+      return res.json(bookings);
+    }
+
+    const [bookings, total] = await Promise.all([
+      query.skip(skip).limit(limit),
+      Booking.countDocuments({ host: req.user.id }),
+    ]);
+
+    return res.json({
+      items: bookings,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
   }
@@ -237,6 +423,15 @@ router.put("/:id/confirm", verifyToken, async (req, res) => {
     }
     
     booking.status = "confirmed";
+    booking.messages.push({
+      sender: req.user.id,
+      text: "Confirmed",
+      timestamp: new Date(),
+      read: false,
+      type: "user",
+    });
+    booking.unreadByGuest = true;
+    booking.unreadByHost = false;
     await booking.save();
     
     // Populate booking with guest info for email
@@ -301,6 +496,16 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
     if (booking.guest.toString() !== req.user.id) {
       return res.status(403).json({ message: "Unauthorized" });
     }
+
+    if (booking.status === "confirmed") {
+      return res.status(400).json({
+        message: "Confirmed bookings require finalization. Use finalize and choose Review, Archive, or Cancel."
+      });
+    }
+
+    if (booking.status === "cancelled" || booking.status === "rejected" || booking.status === "archived") {
+      return res.status(400).json({ message: "Booking is already closed" });
+    }
     
     booking.status = "cancelled";
     await booking.save();
@@ -334,6 +539,59 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
   }
 });
 
+// Start review flow (guest first; host only after guest review)
+router.put("/:id/review/start", verifyToken, async (req, res) => {
+  try {
+    const { anonymous } = req.body || {};
+
+    const booking = await Booking.findById(req.params.id)
+      .populate("property")
+      .populate("guest host", "firstName email emailPreferences");
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    const result = await startReviewFlow({ booking, userId: req.user.id, anonymous });
+
+    if (result.error) {
+      return res.status(result.error.status).json({ message: result.error.message });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to start review", error: error.message });
+  }
+});
+
+// Backward-compatible finalize endpoint: now only supports review
+router.put("/:id/finalize", verifyToken, async (req, res) => {
+  try {
+    const { action, anonymous } = req.body || {};
+    if (String(action || "").toLowerCase() !== "review") {
+      return res.status(400).json({ message: "Only review is supported" });
+    }
+
+    const booking = await Booking.findById(req.params.id)
+      .populate("property")
+      .populate("guest host", "firstName email emailPreferences");
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    const result = await startReviewFlow({ booking, userId: req.user.id, anonymous });
+
+    if (result.error) {
+      return res.status(result.error.status).json({ message: result.error.message });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to start review", error: error.message });
+  }
+});
+
 // Add a message to a booking
 router.post("/:id/message", verifyToken, async (req, res) => {
   try {
@@ -349,9 +607,13 @@ router.post("/:id/message", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
     
-    // Prevent messaging on rejected or cancelled bookings
-    if (booking.status === "rejected" || booking.status === "cancelled") {
-      return res.status(400).json({ message: "Cannot send messages on rejected or cancelled bookings" });
+    // Prevent messaging on closed/finalized bookings
+    if (booking.status === "rejected" || booking.status === "cancelled" || booking.status === "archived") {
+      return res.status(400).json({ message: "Cannot send messages on closed bookings" });
+    }
+
+    if (booking.finalization?.messagingDisabled) {
+      return res.status(400).json({ message: "Messaging is disabled after finalization" });
     }
     
     if (!text || text.trim() === "") {

@@ -1,16 +1,25 @@
-import React, { useMemo, useState } from "react";
-import { Box, Paper, Typography, Chip, Stack, Button, Divider, Breadcrumbs, Link, Card, CardContent } from "@mui/material";
+import React, { useEffect, useMemo, useState } from "react";
+import { Box, Paper, Typography, Chip, Stack, Button, Divider, Breadcrumbs, Link, Card, CardContent, CircularProgress } from "@mui/material";
 import { Link as RouterLink, useLocation } from "react-router-dom";
 import { commonStyles } from "../utils/styleConstants";
 import { SUPPORT_INTERNAL_LINKS, SUPPORT_TOPICS } from "../data/supportTopics";
 import { SUPPORT_RESOURCE_CONTENT } from "../data/supportResourceContent";
 import { hasChatFlow } from "../utils/chatFlowHelpers";
 import SupportTicketDialog from "../components/SupportTicketDialog";
+import { API_URL, isAppTransportMode } from "../utils/api";
+import { useThemeMode } from "../contexts/ThemeContext";
+import { useSnackbar } from "../components/AppSnackbar";
 
 export default function SupportResourcePage() {
   const location = useLocation();
+  const { reEnableCookieNotice } = useThemeMode();
+  const isNativeApp = isAppTransportMode();
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketSubject, setTicketSubject] = useState("");
+  const [cookiePolicy, setCookiePolicy] = useState(null);
+  const [cookiePolicyLoading, setCookiePolicyLoading] = useState(false);
+  const [consentStatus, setConsentStatus] = useState(null);
+  const snackbar = useSnackbar();
 
   const resource = SUPPORT_INTERNAL_LINKS.find((item) => item.href === location.pathname);
   const topic = SUPPORT_TOPICS.find((item) => item.slug === resource?.slug);
@@ -42,6 +51,7 @@ export default function SupportResourcePage() {
   const displayTitle = resource?.title || "Support Resource";
   const displayDescription = resource?.description || "Browse this support topic for guidance and next steps.";
   const displayGroup = resource?.groupTitle || "Support";
+  const isCookiePolicyPage = resource?.slug === "cookie-policy";
   const hasTopicChatFlow = hasChatFlow(resource?.slug || "");
   const solutionLinks = useMemo(() => {
     const raw = Array.isArray(content.solutionLinks) ? content.solutionLinks : [];
@@ -73,6 +83,86 @@ export default function SupportResourcePage() {
     setTicketDialogOpen(true);
   };
 
+  useEffect(() => {
+    if (resource?.slug !== "cookie-policy") {
+      setCookiePolicy(null);
+      setCookiePolicyLoading(false);
+      return;
+    }
+
+    setCookiePolicyLoading(true);
+    fetch(`${API_URL}/analytics/cookie-policy`, {
+      credentials: "include",
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        setCookiePolicy(data);
+      })
+      .catch(() => {
+        setCookiePolicy(null);
+      })
+      .finally(() => {
+        setCookiePolicyLoading(false);
+      });
+
+    fetch(`${API_URL}/analytics/consent/status`, {
+      credentials: "include",
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        setConsentStatus(data);
+      })
+      .catch(() => {
+        setConsentStatus(null);
+      });
+  }, [resource?.slug]);
+
+  const refreshCookiePolicyState = () => {
+    fetch(`${API_URL}/analytics/consent/status`, {
+      credentials: "include",
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        setConsentStatus(data);
+      })
+      .catch(() => {
+        setConsentStatus(null);
+      });
+  };
+
+  const handleSetVoluntaryConsent = (enabled) => {
+    fetch(`${API_URL}/analytics/consent/voluntary`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enabled }),
+    })
+      .then(() => {
+        refreshCookiePolicyState();
+        snackbar(enabled ? "Voluntary signals enabled" : "Voluntary signals disabled", "success");
+      })
+      .catch(() => {
+        refreshCookiePolicyState();
+        snackbar("Could not update voluntary signals", "error");
+      });
+  };
+
+  const handleShowCookieNotice = () => {
+    reEnableCookieNotice();
+    snackbar("Cookie notice enabled", "success");
+  };
+
   return (
     <Box sx={commonStyles.contentContainer}>
       <Typography variant="h4" sx={commonStyles.pageTitle}>
@@ -93,8 +183,18 @@ export default function SupportResourcePage() {
         </Breadcrumbs>
 
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-          <Chip label={displayGroup} color="primary" size="small" />
-          <Chip label="Guide" variant="outlined" size="small" />
+          <Chip
+            label={displayGroup}
+            color={isCookiePolicyPage ? "default" : "primary"}
+            size="small"
+            sx={isCookiePolicyPage ? { bgcolor: "grey.300", color: "grey.900" } : undefined}
+          />
+          <Chip
+            label="Guide"
+            variant="outlined"
+            size="small"
+            sx={isCookiePolicyPage ? { borderColor: "grey.500", color: "grey.700" } : undefined}
+          />
         </Stack>
 
         <Typography variant="body1" sx={{ mb: 1 }}>
@@ -174,6 +274,108 @@ export default function SupportResourcePage() {
                   </Box>
                 ))}
               </Stack>
+            </CardContent>
+          </Card>
+        )}
+
+        {resource?.slug === "cookie-policy" && !isNativeApp && (
+          <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                Live cookie lineup
+              </Typography>
+
+              <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleShowCookieNotice}
+                  sx={{ borderColor: "grey.500", color: "grey.700" }}
+                >
+                  Show cookie notice
+                </Button>
+                {cookiePolicy?.requireVoluntaryForAdvanced ? (
+                  <>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleSetVoluntaryConsent(true)}
+                      sx={{ borderColor: "grey.500", color: "grey.700" }}
+                    >
+                      Enable voluntary signals
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleSetVoluntaryConsent(false)}
+                      sx={{ borderColor: "grey.500", color: "grey.700" }}
+                    >
+                      Disable voluntary signals
+                    </Button>
+                  </>
+                ) : null}
+              </Stack>
+
+              {cookiePolicy?.requireVoluntaryForAdvanced ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25 }}>
+                  Voluntary advanced signals are currently {consentStatus?.voluntaryAllowed ? "enabled" : "disabled"}. These include optional diagnostics like device/location-level metadata.
+                </Typography>
+              ) : null}
+
+              {cookiePolicyLoading ? (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <CircularProgress size={18} />
+                  <Typography variant="body2" color="text.secondary">
+                    Pulling the latest cookie and capture switches...
+                  </Typography>
+                </Box>
+              ) : null}
+
+              {!cookiePolicyLoading && cookiePolicy && (
+                <Stack spacing={1.25}>
+                  <Typography variant="body2" color="text.secondary">
+                    Snapshot generated at {new Date(cookiePolicy.generatedAt).toLocaleString()}.
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip
+                      size="small"
+                      color="default"
+                      sx={{
+                        bgcolor: cookiePolicy.analyticsEnabled ? "grey.300" : "grey.200",
+                        color: "grey.900",
+                      }}
+                      label={cookiePolicy.analyticsEnabled ? "Analytics enabled" : "Analytics disabled"}
+                    />
+                    {Object.entries(cookiePolicy.capture || {}).map(([key, enabled]) => (
+                      <Chip
+                        key={`capture-${key}`}
+                        size="small"
+                        variant={enabled ? "filled" : "outlined"}
+                        color="default"
+                        sx={enabled
+                          ? { bgcolor: "grey.400", color: "grey.900" }
+                          : { borderColor: "grey.500", color: "grey.700" }}
+                        label={`${key}: ${enabled ? "on" : "off"}`}
+                      />
+                    ))}
+                  </Stack>
+
+                  <Box component="ul" sx={{ pl: 2.5, mb: 0, mt: 0 }}>
+                    {(cookiePolicy.cookies || []).map((cookie) => (
+                      <Typography key={`cookie-${cookie.name}`} component="li" variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                        <strong>{cookie.name}</strong> ({cookie.category}) - {cookie.purpose} Status: {cookie.active ? "active" : "inactive"}; seen in this browser: {cookie.presentInRequest ? "yes" : "no"}.
+                      </Typography>
+                    ))}
+                  </Box>
+                </Stack>
+              )}
+
+              {!cookiePolicyLoading && !cookiePolicy && (
+                <Typography variant="body2" color="text.secondary">
+                  Live cookie status is currently unavailable. The static policy summary above is still valid.
+                </Typography>
+              )}
             </CardContent>
           </Card>
         )}

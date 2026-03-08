@@ -1,7 +1,9 @@
 const express = require("express");
 const User = require("../models/User");
 const Property = require("../models/Property");
+const Review = require("../models/Review");
 const verifyToken = require("../middleware/auth");
+const cache = require("../utils/cache");
 const router = express.Router();
 
 // Toggle user role between guest and host
@@ -104,6 +106,50 @@ router.get("/wishlist", verifyToken, async (req, res) => {
   res.json(user.wishList);
 });
 
+// Get lightweight wishlist summary for list rendering
+router.get("/wishlist/summary", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .populate({
+        path: "wishList",
+        select: "title city country category type images pricePerNight rooms rating ownerHost createdAt",
+        populate: {
+          path: "ownerHost",
+          select: "firstName lastName profileImagePath hasPaid",
+        },
+      })
+      .lean();
+
+    return res.json(user?.wishList || []);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch wishlist summary" });
+  }
+});
+
+// Add to wishlist (canonical)
+router.post("/wishlist/:propertyId", verifyToken, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    await User.findByIdAndUpdate(req.user.id, { $addToSet: { wishList: propertyId } });
+    cache.delete(`property:${propertyId}`);
+    return res.json({ message: "Added to wishlist" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to add to wishlist" });
+  }
+});
+
+// Remove from wishlist (canonical)
+router.delete("/wishlist/:propertyId", verifyToken, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    await User.findByIdAndUpdate(req.user.id, { $pull: { wishList: propertyId } });
+    cache.delete(`property:${propertyId}`);
+    return res.json({ message: "Removed from wishlist" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to remove from wishlist" });
+  }
+});
+
 // Get subscription status
 router.get("/subscription-status", verifyToken, async (req, res) => {
   try {
@@ -126,6 +172,60 @@ router.get("/subscription-status", verifyToken, async (req, res) => {
       message: "Failed to get subscription status",
       error: process.env.NODE_ENV === 'production' ? undefined : error.message
     });
+  }
+});
+
+// Public review stats for a user profile (approved/published reviews only)
+router.get("/:userId/review-stats", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .select("firstName lastName ownerHostReviews guestReviews")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const approvedReviews = await Review.find({
+      reviewee: req.params.userId,
+      status: "approved",
+    })
+      .populate("reviewer", "firstName lastName")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const reviewCount = approvedReviews.length;
+    const averageRating = reviewCount > 0
+      ? Number((approvedReviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(2))
+      : null;
+
+    return res.json({
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+      reviewCount,
+      averageRating,
+      publishedBreakdown: {
+        ownerHostReviews: user.ownerHostReviews?.length || 0,
+        guestReviews: user.guestReviews?.length || 0,
+      },
+      recentApprovedReviews: approvedReviews.slice(0, 10).map((review) => ({
+        id: review._id,
+        booking: review.booking,
+        property: review.property,
+        rating: review.rating,
+        comment: review.comment,
+        anonymous: review.anonymous,
+        reviewerName: review.anonymous
+          ? "Anonymous"
+          : `${review.reviewer?.firstName || ""} ${review.reviewer?.lastName || ""}`.trim() || "User",
+        createdAt: review.createdAt,
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch review stats", error: error.message });
   }
 });
 

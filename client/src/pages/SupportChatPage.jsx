@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Paper, Typography, Stack, Button, Breadcrumbs, Link } from "@mui/material";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 import { commonStyles } from "../utils/styleConstants";
@@ -12,8 +12,8 @@ const TYPEWRITER_CONFIG = Object.freeze({
   enabled: true,
   mode: "bot-only",
   startDelayMs: 350,
-  minCharDelayMs: 5,
-  maxCharDelayMs: 60,
+  minCharDelayMs: 15,
+  maxCharDelayMs: 30,
   showCaret: true
 });
 
@@ -29,8 +29,13 @@ const shouldAnimateMessage = (role, mode) => {
   return role === "bot";
 };
 
-function TypewriterText({ text, animate, config }) {
+function TypewriterText({ text, animate, config, onComplete }) {
   const [visibleText, setVisibleText] = useState(animate ? "" : text);
+  const completionNotifiedRef = useRef(false);
+
+  useEffect(() => {
+    completionNotifiedRef.current = false;
+  }, [text, animate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +85,15 @@ function TypewriterText({ text, animate, config }) {
       clearTimeout(timeoutId);
     };
   }, [animate, config.maxCharDelayMs, config.minCharDelayMs, config.startDelayMs, text]);
+
+  useEffect(() => {
+    if (visibleText !== text || completionNotifiedRef.current) {
+      return;
+    }
+
+    completionNotifiedRef.current = true;
+    onComplete?.();
+  }, [onComplete, text, visibleText]);
 
   const showCaret = config.showCaret && animate && visibleText.length < text.length;
 
@@ -145,6 +159,7 @@ export default function SupportChatPage() {
   const [messages, setMessages] = useState(() => [{ role: "bot", text: tree.nodes[tree.startNodeId].message }]);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketSubject, setTicketSubject] = useState("");
+  const [isAwaitingBotResponseRender, setIsAwaitingBotResponseRender] = useState(true);
 
   const currentNode = tree.nodes[currentNodeId];
   const hasOptions = Array.isArray(currentNode?.options) && currentNode.options.length > 0;
@@ -165,10 +180,20 @@ export default function SupportChatPage() {
     });
   }, [slug]);
   const resolvedTicketAction = isTicketLink(resolvedSolutionLink);
+  const latestBotMessageIndex = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === "bot") {
+        return index;
+      }
+    }
+
+    return -1;
+  }, [messages]);
 
   useEffect(() => {
     setCurrentNodeId(tree.startNodeId);
     setMessages([{ role: "bot", text: tree.nodes[tree.startNodeId].message }]);
+    setIsAwaitingBotResponseRender(true);
   }, [tree]);
 
   const chooseOption = (option) => {
@@ -176,6 +201,8 @@ export default function SupportChatPage() {
     if (!nextNode) {
       return;
     }
+
+    setIsAwaitingBotResponseRender(true);
 
     setMessages((prev) => [
       ...prev,
@@ -294,6 +321,7 @@ export default function SupportChatPage() {
                       text={message.text}
                       animate={TYPEWRITER_CONFIG.enabled && shouldAnimateMessage(message.role, TYPEWRITER_CONFIG.mode)}
                       config={TYPEWRITER_CONFIG}
+                      onComplete={index === latestBotMessageIndex ? () => setIsAwaitingBotResponseRender(false) : undefined}
                     />
                   </Typography>
                 </Box>
@@ -301,9 +329,21 @@ export default function SupportChatPage() {
             </Stack>
 
             {hasOptions && (
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                flexWrap="wrap"
+                useFlexGap
+                sx={{ mb: 2, display: isAwaitingBotResponseRender ? "none" : "flex" }}
+              >
                 {currentNode.options.map((option) => (
-                  <Button key={option.label} size="small" variant="contained" onClick={() => chooseOption(option)}>
+                  <Button
+                    key={option.label}
+                    size="small"
+                    variant="contained"
+                    disabled={isAwaitingBotResponseRender}
+                    onClick={() => chooseOption(option)}
+                  >
                     {option.label}
                   </Button>
                 ))}

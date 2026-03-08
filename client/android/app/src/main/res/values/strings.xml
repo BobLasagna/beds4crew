@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Beds4Crew</string>
+    <string name="title_activity_main">Beds4Crew</string>
+    <string name="package_name">com.beds4crew.app</string>
+    <string name="custom_url_scheme">com.beds4crew.app</string>
+</resources>

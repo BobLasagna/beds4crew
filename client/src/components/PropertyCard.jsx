@@ -85,6 +85,7 @@ export default function PropertyCard({
           <Typography variant="body2" color="text.secondary" noWrap>
             {property.address}
           </Typography>
+          {hasRating && <RatingStars value={metrics.rating} count={metrics.reviews} />}
           <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
             {property.lowestPrice ? `$${property.lowestPrice}/night` : formatPriceDisplay(property)}
           </Typography>
@@ -152,23 +153,14 @@ export default function PropertyCard({
           alt={property.title}
           sx={{ objectFit: "cover" }}
         />
-        {(metrics.sellerLevel || metrics.isVerified) && (
+        {metrics.hasPaid && (
           <Box sx={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 1 }}>
-            {metrics.sellerLevel && (
-              <Chip
-                label={metrics.sellerLevel}
-                size="small"
-                sx={{ backgroundColor: "rgba(255,255,255,0.9)", fontWeight: 600 }}
-              />
-            )}
-            {metrics.isVerified && (
-              <Chip
-                label="Verified"
-                size="small"
-                color="success"
-                sx={{ fontWeight: 600 }}
-              />
-            )}
+            <Chip
+              label="Verified"
+              size="small"
+              color="success"
+              sx={{ fontWeight: 600 }}
+            />
           </Box>
         )}
         {showWishlist && onWishlistToggle && (

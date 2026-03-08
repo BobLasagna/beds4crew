@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Box, Typography, Card, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Alert, CircularProgress, MenuItem, Grid, Input, Breadcrumbs, Avatar, Divider, useMediaQuery } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, formatPriceDisplay, API_URL } from "../utils/api";
+import { fetchJson, fetchWithAuth, formatPriceDisplay, getStoredUser, API_URL } from "../utils/api";
 import { LoadingState } from "../components/EmptyState";
 import RoomBedsConfigurator from "../components/RoomBedsConfigurator";
 import PhotoTile from "../components/PhotoTile";
@@ -16,6 +16,7 @@ import MapView from "../components/HotelMapView";
 import MediaGallery from "../components/MediaGallery";
 import { commonStyles } from "../utils/styleConstants";
 import { formatImageUrl, getListingMetrics } from "../utils/helpers";
+import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import RatingStars from "../components/RatingStars";
 import EditIcon from "@mui/icons-material/Edit";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -27,7 +28,7 @@ const getBreadcrumbLabel = (routePath) => {
   if (!routePath) return "Listings";
   if (routePath.startsWith("/browse")) return "Browse";
   if (routePath.startsWith("/properties")) return "Listings";
-  if (routePath.startsWith("/wishlist")) return "Wishlist";
+  if (routePath.startsWith("/favorites")) return "Favorites";
   if (routePath.startsWith("/trips")) return "Trips";
   if (routePath.startsWith("/my-listings")) return "My listings";
   if (routePath.startsWith("/reservations")) return "Reservations";
@@ -39,10 +40,11 @@ const getBreadcrumbLabel = (routePath) => {
 export default function PropertyDetailPage() {
   const { id } = useParams();
   const [property, setProperty] = useState(null);
+  const [propertyReviews, setPropertyReviews] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
-  const [blockedPeriods, setBlockedPeriods] = useState([]);
+  const [blockedPeriods] = useState([]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
   const [endDate, setEndDate] = useState(null);
@@ -63,6 +65,8 @@ export default function PropertyDetailPage() {
     valid: false
   });
   const [bookingLoading, setBookingLoading] = useState(false);
+  const reservationSectionRef = useRef(null);
+  const hasAutoScrolledToReservationRef = useRef(false);
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,31 +82,33 @@ export default function PropertyDetailPage() {
   })();
   const previousRouteLabel = getBreadcrumbLabel(previousRoute);
 
+  const loadPropertyData = useCallback(async () => {
+    const [propertyData, bookingData, reviewsData] = await Promise.all([
+      fetchJson(`${API_URL}/properties/${id}`),
+      fetchJson(`${API_URL}/bookings/property/${id}`),
+      fetchJson(`${API_URL}/reviews/property/${id}?limit=6`),
+    ]);
+
+    setProperty(propertyData);
+    setEditForm(propertyData);
+
+    const confirmedBookings = bookingData.filter((booking) => booking.status === "confirmed");
+    const pendingBookingsList = bookingData.filter((booking) => booking.status === "pending");
+    setBookings(confirmedBookings);
+    setPendingBookings(pendingBookingsList);
+    setPropertyReviews(Array.isArray(reviewsData?.items) ? reviewsData.items : Array.isArray(reviewsData) ? reviewsData : []);
+  }, [id]);
+
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    setCurrentUser(user);
+    setCurrentUser(getStoredUser());
   }, []);
 
   useEffect(() => {
-    fetch(`${API_URL}/properties/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        setProperty(data);
-        setEditForm(data);
-      });
-    
-    // Fetch bookings for this property
-    fetch(`${API_URL}/bookings/property/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        // Separate confirmed and pending bookings
-        const confirmedBookings = data.filter(b => b.status === "confirmed");
-        const pendingBookingsList = data.filter(b => b.status === "pending");
-        setBookings(confirmedBookings);
-        setPendingBookings(pendingBookingsList);
-      })
-      .catch(err => console.error("Failed to fetch bookings:", err));
-  }, [id]);
+    loadPropertyData().catch((error) => {
+      console.error("Failed to fetch property data:", error);
+      snackbar("Failed to load property details", "error");
+    });
+  }, [loadPropertyData, snackbar]);
 
   useEffect(() => {
     if (currentUser && property) {
@@ -122,12 +128,33 @@ export default function PropertyDetailPage() {
 
   useEffect(() => {
     if (isOwner && searchParams.get("edit") === "true") {
-      setEditDialogOpen(true);
+      setIsEditing(true);
     }
   }, [isOwner, searchParams]);
 
+  useEffect(() => {
+    hasAutoScrolledToReservationRef.current = false;
+  }, [id]);
+
+  const scrollToReservationSection = useCallback((behavior = "smooth") => {
+    if (!reservationSectionRef.current) return;
+    scrollElementIntoViewWithOffset(reservationSectionRef.current, {
+      behavior,
+      extraOffset: 12,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!property || hasAutoScrolledToReservationRef.current) return;
+    if (searchParams.get("scrollTo") !== "reservation") return;
+
+    hasAutoScrolledToReservationRef.current = true;
+    window.requestAnimationFrame(() => {
+      scrollToReservationSection("smooth");
+    });
+  }, [property, searchParams, scrollToReservationSection]);
+
   const handleBookingSelectionChange = useCallback((selection) => {
-    console.log('PropertyDetailPage: Received booking selection from BedSelector:', selection);
     setBookingSelection(selection);
   }, []);
 
@@ -248,7 +275,7 @@ export default function PropertyDetailPage() {
       const updated = data;
       setProperty(updated);
       snackbar(`Property ${updated.status === "active" ? "activated" : "disabled"} successfully`);
-      window.location.reload();
+      await loadPropertyData();
     } catch (err) {
       snackbar(err.message || "Failed to update property", "error");
     } finally {
@@ -291,16 +318,13 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to update caption");
       setProperty(await res.json());
       snackbar("Caption updated successfully");
-      // Reload page to ensure fresh data
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-    } catch (err) {
+      await loadPropertyData();
+    } catch {
       snackbar("Failed to update caption", "error");
     } finally {
       setCaptionLoading(prev => ({ ...prev, [idx]: false }));
     }
-  }, [id, snackbar]);
+  }, [id, loadPropertyData, snackbar]);
 
   const handleImageDelete = useCallback(async (idx) => {
     try {
@@ -309,7 +333,7 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to delete image");
       setProperty(await res.json());
       snackbar("Image deleted successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to delete image", "error");
     } finally {
       setDeleteLoading(prev => ({ ...prev, [idx]: false }));
@@ -330,9 +354,9 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to upload images");
       setProperty(await res.json());
       e.target.value = "";
-      window.location.reload();
+      await loadPropertyData();
       snackbar("Photos uploaded successfully");
-    } catch (err) {
+    } catch {
       snackbar("Failed to upload photos", "error");
     } finally {
       setUploadLoading(false);
@@ -348,7 +372,7 @@ export default function PropertyDetailPage() {
       if (!res.ok) throw new Error("Failed to delete property");
       snackbar("Property deleted successfully");
       navigate("/");
-    } catch (err) {
+    } catch {
       snackbar("Failed to delete property", "error");
     } finally {
       setDeletePropertyLoading(false);
@@ -462,18 +486,39 @@ export default function PropertyDetailPage() {
 
       <Box sx={{ mb: 3 }}>
         <Box display="flex" alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between" gap={2} flexWrap="wrap">
-          {isEditing ? (
-            <TextField
-              label="Title"
-              name="title"
-              value={editForm.title || ""}
-              onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })}
-              fullWidth
-              sx={{ maxWidth: 520 }}
-            />
-          ) : (
-            <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>{property.title}</Typography>
-          )}
+          <Box sx={{ minWidth: 0, flex: "1 1 420px" }}>
+            {isEditing ? (
+              <TextField
+                label="Title"
+                name="title"
+                value={editForm.title || ""}
+                onChange={(e) => setEditForm({ ...editForm, [e.target.name]: e.target.value })}
+                fullWidth
+                sx={{ maxWidth: 520 }}
+              />
+            ) : (
+              <>
+                <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>{property.title}</Typography>
+                {!isOwner && isPropertyActive && hostHasPaid && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => scrollToReservationSection("smooth")}
+                    sx={{
+                      textTransform: "none",
+                      borderRadius: 999,
+                      px: 2,
+                      py: 0.5,
+                      fontWeight: 700,
+                      mb: 1,
+                    }}
+                  >
+                    Book now
+                  </Button>
+                )}
+              </>
+            )}
+          </Box>
           {isOwner && (
             <Button
               variant={isEditing ? "outlined" : "contained"}
@@ -496,7 +541,7 @@ export default function PropertyDetailPage() {
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {property.ownerHost?.firstName ? `${property.ownerHost.firstName} ${property.ownerHost.lastName || ""}` : "Verified Host"}
             </Typography>
-            {metrics.isVerified && <Chip label="Verified" size="small" color="success" />}
+            {metrics.hasPaid && <Chip label="Verified" size="small" color="success" />}
           </Box>
           {hasRating && <RatingStars value={metrics.rating} count={metrics.reviews} />}
           <Typography variant="body2" color="text.secondary">{property.city}, {property.country}</Typography>
@@ -634,7 +679,7 @@ export default function PropertyDetailPage() {
             </Card>
 
             <Box sx={{ position: { md: "sticky" }, top: { md: 96 } }}>
-              <Card sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+              <Card ref={reservationSectionRef} sx={{ p: 3, borderRadius: 3, mb: 3 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
                   Create Reservation
                 </Typography>
@@ -875,6 +920,7 @@ export default function PropertyDetailPage() {
                       radius={1}
                       height="320px"
                       onPropertyClick={() => navigate(`/property/${property._id}`)}
+                      onPropertyBookClick={() => scrollToReservationSection("smooth")}
                     />
                   </Box>
                 ) : (
@@ -885,25 +931,34 @@ export default function PropertyDetailPage() {
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Reviews</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Verified guest feedback builds trust.</Typography>
                 <Divider sx={{ mb: 2 }} />
-                {hasRating ? (
-                  Array.from({ length: 3 }).map((_, idx) => (
-                    <Box key={idx} sx={{ mb: 2 }}>
-                      <RatingStars value={metrics.rating} showCount={false} />
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        “Seamless stay, quick responses, and reliable check-in. Would book again.”
+                {propertyReviews.length > 0 ? (
+                  propertyReviews.map((review, idx) => (
+                    <Box key={review.id || idx} sx={{ mb: 2 }}>
+                      <RatingStars value={review.rating} showCount={false} />
+                      {review.comment ? (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          “{review.comment}”
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          Guest left a rating without written feedback.
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        {review.reviewerName || "Guest"} · {new Date(review.publishedAt || review.createdAt).toLocaleDateString()}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">Verified stay</Typography>
-                      {idx < 2 && <Divider sx={{ mt: 2 }} />}
+                      {idx < propertyReviews.length - 1 && <Divider sx={{ mt: 2 }} />}
                     </Box>
                   ))
                 ) : (
                   <Typography variant="body2" color="text.secondary">
-                    No reviews yet.
+                    {hasRating ? "No published review comments yet." : "No reviews yet."}
                   </Typography>
                 )}
               </Card>
               <Divider sx={{ mb: 2 }} />
-              <Card sx={{ p: 3, borderRadius: 3 }}>
+              {/* TODO IMPLEMENT HOST STATS FOR RESPONSE TIME */}
+              {/* <Card sx={{ p: 3, borderRadius: 3 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>Host snapshot</Typography>
                   {metrics.completionRate || metrics.responseHours ? (
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -916,8 +971,9 @@ export default function PropertyDetailPage() {
                       No host stats yet.
                     </Typography>
                   )}
-                  {/* TODO <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button> */}
-              </Card>
+                    TODO IMPLIMENT VIEW HOST PROFILE (public profile with host's other listings, reviews, direct message, and about section)
+                  <Button variant="outlined" fullWidth onClick={() => navigate("/profile")}>View Host profile</Button>
+              </Card> */}
             
           </Box>
         </Grid>

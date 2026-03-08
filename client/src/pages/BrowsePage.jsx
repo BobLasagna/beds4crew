@@ -22,7 +22,8 @@ import { commonStyles } from "../utils/styleConstants";
 import MapView from '../components/HotelMapView';
 import PropertyCard from '../components/PropertyCard';
 import { useSnackbar } from '../components/AppSnackbar';
-import { fetchWithAuth, API_URL } from '../utils/api';
+import { fetchJson, fetchJsonWithAuth, fetchWithAuth, getStoredUser, isAppTransportMode, API_URL } from '../utils/api';
+import { scrollElementIntoViewWithOffset } from '../utils/scroll';
 import { useNavigate } from 'react-router-dom';
 
 //TODO: Move to config file or generate based off existing data
@@ -38,28 +39,64 @@ const POPULAR_LOCATIONS = [
 const DEFAULT_LOCATION = { lat: 25.7617, lng: -80.1918 };
 const DEFAULT_RADIUS_MILES = 30;
 const RESULTS_PER_PAGE = 10;
-const CLUSTER_RADIUS_METERS = 200;
 const SORT_OPTIONS = [
   { value: 'recommended', label: 'Recommended' },
   { value: 'price-low', label: 'Price: Low to High' },
   { value: 'price-high', label: 'Price: High to Low' },
 ];
 
+const CITY_NAME_REGEX = /^[A-Za-z]+(?:[\s.'-][A-Za-z]+)*(?:,\s*[A-Za-z]{2})?$/;
+
+const normalizeLocationQuery = (input = '') => input.trim().replace(/\s+/g, ' ');
+
+const getLocationValidation = (input = '') => {
+  const query = normalizeLocationQuery(input);
+
+  if (!query) {
+    return { query, valid: false, message: '' };
+  }
+
+  if (/\d/.test(query)) {
+    return {
+      query,
+      valid: false,
+      message: 'City names cannot include numbers.',
+    };
+  }
+
+  if (query.length < 3) {
+    return {
+      query,
+      valid: false,
+      message: 'Enter at least 3 letters for a city.',
+    };
+  }
+
+  if (CITY_NAME_REGEX.test(query)) {
+    return { query, valid: true, message: '' };
+  }
+
+  return {
+    query,
+    valid: false,
+    message: 'Use letters/spaces for city names (e.g., Miami, FL).',
+  };
+};
+
 export default function BrowsePage() {
+  const isNativeApp = isAppTransportMode();
+  const defaultGridColumns = isNativeApp ? 1 : 3;
   const [allProperties, setAllProperties] = useState([]);
   const [center, setCenter] = useState(DEFAULT_LOCATION);
   const [radius, setRadius] = useState(DEFAULT_RADIUS_MILES);
   const [loading, setLoading] = useState(true);
   const [wishlist, setWishlist] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showCustomSearch, setShowCustomSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
   const [sortBy, setSortBy] = useState('recommended');
   const [showMap, setShowMap] = useState(true);
-  const [showControls, setShowControls] = useState(true);
+  const [showControls] = useState(true);
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
-  const [gridColumns, setGridColumns] = useState(3);
+  const [gridColumns, setGridColumns] = useState(defaultGridColumns);
   const [startDate, setStartDate] = useState(dayjs().add(1, 'day'));
   const [endDate, setEndDate] = useState(null);
   const [locationOptions, setLocationOptions] = useState([]);
@@ -71,16 +108,49 @@ export default function BrowsePage() {
   const snackbar = useSnackbar();
   const gridOptions = [5, 3, 2, 1];
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = getStoredUser();
   const mapSectionRef = useRef(null);
   const resultsListRef = useRef(null);
+  const locationValidation = useMemo(
+    () => getLocationValidation(locationInput),
+    [locationInput]
+  );
+  const combinedLocationOptions = useMemo(
+    () => [...POPULAR_LOCATIONS, ...locationOptions],
+    [locationOptions]
+  );
+
+  const applyLocationSelection = useCallback((location) => {
+    if (!location) return;
+    setCenter({ lat: location.lat, lng: location.lng });
+    setLocationInput(location.label || '');
+    setCurrentPage(1);
+  }, []);
+
+  const findMatchingLocationOption = useCallback((input = '') => {
+    const normalizedInput = normalizeLocationQuery(input).toLowerCase();
+    if (!normalizedInput) return null;
+
+    return (
+      combinedLocationOptions.find((option) => {
+        const normalizedLabel = normalizeLocationQuery(option.label).toLowerCase();
+        return normalizedLabel === normalizedInput;
+      }) || null
+    );
+  }, [combinedLocationOptions]);
+
+  const commitTypedLocationIfMatch = useCallback(() => {
+    const match = findMatchingLocationOption(locationInput);
+    if (match) {
+      applyLocationSelection(match);
+    }
+  }, [applyLocationSelection, findMatchingLocationOption, locationInput]);
 
   // Fetch user's wishlist
   useEffect(() => {
     if (!user?.id) return;
-    fetchWithAuth(`${API_URL}/auth/me`)
-      .then(res => res.json())
-      .then(data => setWishlist(data.wishList || []))
+    fetchJsonWithAuth(`${API_URL}/users/wishlist`)
+      .then(data => setWishlist((data || []).map((property) => property?._id).filter(Boolean)))
       .catch(err => console.error('Failed to fetch wishlist:', err));
   }, [user.id]);
 
@@ -101,7 +171,7 @@ export default function BrowsePage() {
         if (state.radius) setRadius(state.radius);
         if (state.properties) setAllProperties(state.properties);
         if (state.sortBy) setSortBy(state.sortBy);
-        if (state.gridColumns) setGridColumns(state.gridColumns);
+        if (state.gridColumns) setGridColumns(isNativeApp ? 1 : state.gridColumns);
         if (state.locationInput) setLocationInput(state.locationInput);
         // Clear the saved state after restoring
         sessionStorage.removeItem('browseSearchState');
@@ -109,7 +179,7 @@ export default function BrowsePage() {
         console.error('Failed to restore search state:', err);
       }
     }
-  }, []);
+  }, [isNativeApp]);
 
   // Calculate distance in miles between two lat/lng points using Haversine formula
   const calculateDistance = useCallback((lat1, lng1, lat2, lng2) => {
@@ -129,11 +199,6 @@ export default function BrowsePage() {
     return R * c;
   }, []);
 
-  // Calculate distance in meters
-  const calculateDistanceMeters = useCallback((lat1, lng1, lat2, lng2) => {
-    return calculateDistance(lat1, lng1, lat2, lng2) * 1609.34;
-  }, [calculateDistance]);
-
   // Filter properties within radius (only those with coordinates)
   const filteredPropertiesWithCoords = useMemo(() => {
     return allProperties.filter(p => {
@@ -149,44 +214,6 @@ export default function BrowsePage() {
     return filteredPropertiesWithCoords;
   }, [filteredPropertiesWithCoords]);
 
-  // Group properties by proximity (CLUSTER_RADIUS_METERS) - only for map
-  const groupedMarkers = useMemo(() => {
-    if (!filteredPropertiesWithCoords.length) {
-      return [];
-    }
-
-    const groups = [];
-    const visited = new Set();
-
-    for (let i = 0; i < filteredPropertiesWithCoords.length; i++) {
-      if (visited.has(i)) continue;
-
-      const prop = filteredPropertiesWithCoords[i];
-      const cluster = [prop];
-      visited.add(i);
-
-      // Find all properties within CLUSTER_RADIUS_METERS of this property
-      for (let j = i + 1; j < filteredPropertiesWithCoords.length; j++) {
-        if (visited.has(j)) continue;
-        const otherProp = filteredPropertiesWithCoords[j];
-        const dist = calculateDistanceMeters(
-          prop.latitude,
-          prop.longitude,
-          otherProp.latitude,
-          otherProp.longitude
-        );
-        if (dist <= CLUSTER_RADIUS_METERS) {
-          cluster.push(otherProp);
-          visited.add(j);
-        }
-      }
-
-      groups.push(cluster);
-    }
-
-    return groups;
-  }, [filteredPropertiesWithCoords, calculateDistanceMeters]);
-
   const totalPages = Math.ceil(totalResults / RESULTS_PER_PAGE);
   const paginatedProperties = allPropertiesForList;
 
@@ -195,6 +222,12 @@ export default function BrowsePage() {
       setCurrentPage(1);
     }
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (isNativeApp && gridColumns !== 1) {
+      setGridColumns(1);
+    }
+  }, [isNativeApp, gridColumns]);
 
   const fetchAllPropertiesPage = useCallback(async (page = 1) => {
     setLoading(true);
@@ -208,12 +241,7 @@ export default function BrowsePage() {
         radius: String(radius),
       });
 
-      const res = await fetch(`${API_URL}/properties?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Failed to load properties');
-      }
+      const data = await fetchJson(`${API_URL}/properties?${params.toString()}`);
 
       const items = Array.isArray(data.items)
         ? data.items
@@ -260,12 +288,7 @@ export default function BrowsePage() {
         sort: sortBy,
       });
 
-      const res = await fetch(`${API_URL}/properties/date-finder?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Search failed');
-      }
+      const data = await fetchJson(`${API_URL}/properties/date-finder?${params.toString()}`);
 
       const items = Array.isArray(data.properties) ? data.properties : [];
       const pagination = data.pagination || {
@@ -328,15 +351,8 @@ export default function BrowsePage() {
     }
     setSelectedPropertyId(property._id);
     window.requestAnimationFrame(() => {
-      const headerEl = document.querySelector('header, .MuiAppBar-root');
-      const headerOffset = headerEl?.getBoundingClientRect().height || 0;
       const mapEl = mapSectionRef.current;
-      if (!mapEl) return;
-      const mapTop = mapEl.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({
-        top: Math.max(mapTop - headerOffset - 12, 0),
-        behavior: 'smooth',
-      });
+      scrollElementIntoViewWithOffset(mapEl, { extraOffset: 12 });
     });
   };
 
@@ -356,41 +372,9 @@ export default function BrowsePage() {
     />
   );
 
-  const handleLocationChange = (e) => {
-    const selected = POPULAR_LOCATIONS.find(l => l.label === e.target.value);
-    if (selected) {
-      setCenter({ lat: selected.lat, lng: selected.lng });
-      setCurrentPage(1);
-    }
-  };
-
-  const handleCustomLocationSearch = async () => {
-    if (!searchQuery.trim()) {
-      snackbar('Please enter a location to search', 'warning');
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/geocoding/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      if (!data.lat || !data.lon) {
-        snackbar('No results found for that location', 'error');
-        return;
-      }
-      setCenter({ lat: parseFloat(data.lat), lng: parseFloat(data.lon) });
-      setCurrentPage(1);
-      snackbar('Location updated successfully', 'success');
-    } catch (err) {
-      console.error('Error searching location:', err);
-      snackbar('Error searching for location', 'error');
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
   // Debounced location search for autocomplete
   useEffect(() => {
-    if (!locationInput || locationInput.length < 3) {
+    if (!locationValidation.query || !locationValidation.valid) {
       setLocationOptions([]);
       return;
     }
@@ -398,24 +382,26 @@ export default function BrowsePage() {
     const timer = setTimeout(async () => {
       setGeocoding(true);
       try {
-        const res = await fetch(`${API_URL}/geocoding/search?q=${encodeURIComponent(locationInput)}`);
-        const data = await res.json();
+        const data = await fetchJson(`${API_URL}/geocoding/search?q=${encodeURIComponent(locationValidation.query)}`);
         if (data.lat && data.lon) {
           setLocationOptions([{
-            label: data.display_name || locationInput,
+            label: data.display_name || locationValidation.query,
             lat: parseFloat(data.lat),
             lng: parseFloat(data.lon)
           }]);
+        } else {
+          setLocationOptions([]);
         }
       } catch (err) {
         console.error('Geocoding error:', err);
+        setLocationOptions([]);
       } finally {
         setGeocoding(false);
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [locationInput]);
+  }, [locationValidation]);
 
   // Search by date range
   const handleDateSearch = async () => {
@@ -443,16 +429,8 @@ export default function BrowsePage() {
     if (result.properties.length > 0) {
       setSelectedPropertyId(result.properties[0]._id);
       setTimeout(() => {
-        const headerEl = document.querySelector('header, .MuiAppBar-root');
-        const headerOffset = headerEl?.getBoundingClientRect().height || 0;
         const resultsEl = resultsListRef.current;
-        if (resultsEl) {
-          const resultsTop = resultsEl.getBoundingClientRect().top + window.scrollY;
-          window.scrollTo({
-            top: Math.max(resultsTop - headerOffset - 20, 0),
-            behavior: 'smooth',
-          });
-        }
+        scrollElementIntoViewWithOffset(resultsEl, { extraOffset: 20 });
       }, 100);
     }
 
@@ -466,8 +444,6 @@ export default function BrowsePage() {
   const handleResetFilters = () => {
     setCenter(DEFAULT_LOCATION);
     setRadius(DEFAULT_RADIUS_MILES);
-    setSearchQuery('');
-    setShowCustomSearch(false);
     setSortBy('recommended');
     setCurrentPage(1);
     setStartDate(null);
@@ -479,7 +455,7 @@ export default function BrowsePage() {
 
   const handleToggleWishlist = async (propertyId) => {
     if (!user?.id) {
-      snackbar('Please login to add to wishlist', 'warning');
+      snackbar('Please login to save favorites', 'warning');
       return;
     }
     
@@ -487,23 +463,20 @@ export default function BrowsePage() {
     const method = inWishlist ? 'DELETE' : 'POST';
 
     try {
-      const res = await fetchWithAuth(
-        `${API_URL}/properties/${propertyId}/wishlist`,
-        { method }
-      );
+      const res = await fetchWithAuth(`${API_URL}/users/wishlist/${propertyId}`, { method });
       if (res.ok) {
         setWishlist(prev => {
           if (inWishlist) {
-            snackbar('Property removed from wishlist', 'info');
+            snackbar('Property removed from favorites', 'info');
             return prev.filter(id => id !== propertyId);
           } else {
-            snackbar('Property added to wishlist', 'info');
+            snackbar('Property saved to favorites', 'info');
             return [...prev, propertyId];
           }
         });
       }
-    } catch (err) {
-      snackbar('Failed to update wishlist', 'error');
+    } catch {
+      snackbar('Failed to update favorites', 'error');
     }
   };
 
@@ -593,23 +566,41 @@ export default function BrowsePage() {
             {/* Location Search with Autocomplete */}
             <Autocomplete
               freeSolo
-              options={[...POPULAR_LOCATIONS, ...locationOptions]}
+              options={combinedLocationOptions}
               getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
               inputValue={locationInput}
-              onInputChange={(e, value) => setLocationInput(value)}
+              onInputChange={(_, value) => setLocationInput(value)}
               onChange={(e, value) => {
                 if (value && typeof value === 'object') {
-                  setCenter({ lat: value.lat, lng: value.lng });
-                  setCurrentPage(1);
+                  applyLocationSelection(value);
+                  return;
+                }
+
+                if (typeof value === 'string') {
+                  const match = findMatchingLocationOption(value);
+                  if (match) {
+                    applyLocationSelection(match);
+                  }
                 }
               }}
               loading={geocoding}
               renderInput={(params) => (
                 <TextField
                   {...params}
+                  onBlur={commitTypedLocationIfMatch}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      commitTypedLocationIfMatch();
+                    }
+                  }}
                   label="Search Location"
-                  placeholder="City name"
-                  helperText="Type to search cities"
+                  placeholder="City (e.g. Miami, FL)"
+                  error={Boolean(locationValidation.query) && !locationValidation.valid}
+                  helperText={
+                    locationValidation.query && !locationValidation.valid
+                      ? locationValidation.message
+                      : 'Search by city name only'
+                  }
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (
@@ -703,13 +694,18 @@ export default function BrowsePage() {
           ) : filteredPropertiesWithCoords.length > 0 ? (
             <MapView
               properties={filteredPropertiesWithCoords}
-              groupedMarkers={groupedMarkers}
               center={center}
               radius={radius}
               selectedPropertyId={selectedPropertyId}
+              onMarkerSelect={(id) => setSelectedPropertyId(id)}
+              onSelectionClear={() => setSelectedPropertyId(null)}
               onPropertyClick={(id) => {
                 saveSearchState();
                 navigate(`/property/${id}`);
+              }}
+              onPropertyBookClick={(id) => {
+                saveSearchState();
+                navigate(`/property/${id}?scrollTo=reservation`);
               }}
             />
           ) : (
@@ -732,25 +728,27 @@ export default function BrowsePage() {
           <Typography variant="h6">
             Results ({totalResults})
           </Typography>
-          <Box>
-            <Typography variant="body2" gutterBottom>
-              Results per row
-            </Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={gridColumns}
-              onChange={(_, value) => {
-                if (value) setGridColumns(value);
-              }}
-            >
-              {gridOptions.map((option) => (
-                <ToggleButton key={option} value={option}>
-                  {option}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Box>
+          {!isNativeApp && (
+            <Box>
+              <Typography variant="body2" gutterBottom>
+                Results per row
+              </Typography>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={gridColumns}
+                onChange={(_, value) => {
+                  if (value) setGridColumns(value);
+                }}
+              >
+                {gridOptions.map((option) => (
+                  <ToggleButton key={option} value={option}>
+                    {option}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+          )}
         </Box>
         <Divider sx={{ mb: 2 }} />
 

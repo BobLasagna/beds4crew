@@ -1,5 +1,60 @@
 # Production Deployment Checklist
 
+## 📱 Mobile Launch Stabilization (M5/S1)
+
+Use this section as the release-readiness gate for the app wrapper launch slice.
+
+### Regression matrix (critical paths)
+
+| Area | Scope | Result | Severity |
+|------|-------|--------|----------|
+| App wrapper | Client production build (`vite build`) | Pass | Low |
+| Auth | Login/session transport surfaces linted (`LoginPage`, `api.js`) | Pass (warnings only) | Low |
+| Navigation | `NavigationDrawer` linted and build-integrated | Pass (warnings only) | Low |
+| Notifications | `AppSnackbar` linted and build-integrated | Pass | Low |
+| Booking-critical | `ReservationListPage` linted and build-integrated | Pass (warnings only) | Low |
+| Server runtime | `npm run dev --prefix server` startup + analytics dry-run | Pass | Low |
+
+No high-severity regression identified in this M5/S1 pass.
+
+### Required developer launch steps (exact order)
+
+1. Build + verify client bundle:
+  ```bash
+  npm run build --prefix client
+  ```
+2. Validate server script health:
+  ```bash
+  npm run analytics:compact:dry --prefix server
+  ```
+3. Start server and verify boot logs:
+  ```bash
+  npm run dev --prefix server
+  ```
+4. Run focused critical-path lint checks:
+  ```bash
+  cd /Users/cross/Desktop/web-app/client && npx eslint ./src/utils/api.js ./src/pages/LoginPage.jsx ./src/components/NavigationDrawer.jsx ./src/components/AppSnackbar.jsx ./src/pages/ReservationListPage.jsx
+  ```
+5. Run the demo helper (session prompt generation):
+  ```bash
+  ./mobile-one-click.sh --status
+  ./mobile-one-click.sh
+  ```
+
+### Known issues (non-blocking for v1)
+
+- ESLint reports hook dependency warnings (no errors) on:
+  - `src/components/NavigationDrawer.jsx`
+  - `src/pages/ReservationListPage.jsx`
+- Notification settings currently rely on OS default sound; in-app sound picker is not implemented.
+- Ionic account/Appflow setup is optional and only needed for cloud packaging workflows.
+
+### Post-v1 backlog pointers
+
+- Add user-selectable notification sound profiles in app settings.
+- Add optional Ionic Appflow-based CI packaging lane (iOS/Android artifacts).
+- Integrate local secure AI assistant workflow (on-device or self-hosted service) with explicit privacy constraints.
+
 ## ✅ Environment Variables
 
 Ensure these are set in your production environment:
@@ -8,6 +63,10 @@ Ensure these are set in your production environment:
 - [ ] `MONGO_URL` - MongoDB connection string
 - [ ] `JWT_SECRET` - Strong random string for access tokens
 - [ ] `JWT_REFRESH_SECRET` - Strong random string for refresh tokens
+- [ ] `AUTH_USE_HTTP_ONLY_COOKIES=true` - Enables cookie session mode
+- [ ] `AUTH_REQUIRE_CSRF=true` - Enforces CSRF on state-changing routes
+- [ ] `ADMIN_ALLOWLIST_EMAILS` - Comma-separated admin emails
+- [ ] `ADMIN_ALLOWLIST_IDS` - Comma-separated admin user IDs (optional)
 - [ ] `STRIPE_SECRET_KEY` - Stripe production secret key (starts with `sk_live_`)
 - [ ] `STRIPE_PRICE_TIER1` - Stripe Basic plan price ID (starts with `price_`)
 - [ ] `STRIPE_PRICE_TIER2` - Stripe Growth plan price ID (starts with `price_`)
@@ -166,11 +225,15 @@ Ensure these are set in your production environment:
 ## 🆘 Rollback Plan
 
 If issues occur:
-1. Switch Stripe back to test mode
-2. Restore previous environment variables
-3. Check webhook delivery logs in Stripe
-4. Review server logs for errors
-5. Use manual sync feature to fix inconsistent data
+1. Disable strict auth rollout flags temporarily:
+  - `AUTH_USE_HTTP_ONLY_COOKIES=false`
+  - `AUTH_REQUIRE_CSRF=false`
+2. Keep JWT secrets configured (`JWT_SECRET`, `JWT_REFRESH_SECRET`) during rollback
+3. Switch Stripe back to test mode if billing behavior is impacted
+4. Restore previous environment variables
+5. Check webhook delivery logs in Stripe
+6. Review server logs for errors
+7. Use manual sync feature to fix inconsistent data
 
 ## 📱 User Communication
 

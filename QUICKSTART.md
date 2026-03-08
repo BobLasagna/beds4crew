@@ -36,6 +36,49 @@ npm run dev
 ```
 Client runs on: http://localhost:5173
 
+## 📱 Mobile App Bootstrap (Capacitor)
+
+Use this flow to run the existing client build in native iOS/Android shells.
+
+### Prerequisites
+- Xcode (for iOS simulator/device)
+- Android Studio + Android SDK (for Android emulator/device)
+- CocoaPods installed for iOS dependency management
+
+### 1. Install client dependencies
+```bash
+npm install --prefix client
+```
+
+### 2. Build web assets and sync native projects
+```bash
+npm run build:mobile --prefix client
+```
+
+### 3. Open native projects
+```bash
+# iOS
+npm run mobile:open:ios --prefix client
+
+# Android
+npm run mobile:open:android --prefix client
+```
+
+From Xcode/Android Studio, run on a simulator or attached device.
+
+### 4. Resync after web code changes
+```bash
+npm run mobile:sync --prefix client
+```
+
+## 🧰 Mobile Bootstrap Troubleshooting
+
+- `npx cap sync` fails with missing `dist`: run `npm run build --prefix client` first.
+- iOS build fails due to pods: run `cd client/ios/App && pod install`.
+- Android SDK errors: open Android Studio, install required SDK/platform tools, then re-open the project.
+- Native project does not reflect recent web changes: run `npm run mobile:sync --prefix client` again.
+- `npx cap open` command not found: run `npm install --prefix client` to restore local CLI.
+
 ## 📊 Performance Improvements
 
 | Metric | Before | After | Improvement |
@@ -75,10 +118,21 @@ All routes are lazy-loaded:
 
 ### Security
 - Input sanitization on all user inputs
-- JWT with refresh token rotation
+- HttpOnly cookie auth with refresh token rotation
+- CSRF protection on state-changing API routes
+- Admin access controlled by environment allowlist
 - File upload size limits (5MB)
 - Email validation
 - Password strength requirements
+
+### Auth Rollout Flags
+
+Set these server environment variables to control rollout behavior:
+
+- `AUTH_USE_HTTP_ONLY_COOKIES=true`
+- `AUTH_REQUIRE_CSRF=true`
+- `ADMIN_ALLOWLIST_EMAILS=admin@example.com`
+- `ADMIN_ALLOWLIST_IDS=`
 
 ## 🛠️ Development Tips
 
