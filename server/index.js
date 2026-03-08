@@ -5,7 +5,13 @@ const cookieParser = require("cookie-parser");
 const mongoose = require("mongoose");
 const path = require("path");
 require("dotenv").config();
-const { CSRF_COOKIE_NAME } = require("./utils/tokenHelpers");
+const {
+  ACCESS_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  isAppAuthModeRequest,
+  parseBearerToken,
+} = require("./utils/tokenHelpers");
 const analyticsMiddleware = require("./middleware/analytics");
 
 const app = express();
@@ -109,6 +115,16 @@ if (AUTH_USE_HTTP_ONLY_COOKIES && AUTH_REQUIRE_CSRF) {
     }
 
     if (csrfExemptPaths.has(req.path)) {
+      return next();
+    }
+
+    const isAppModeRequest = isAppAuthModeRequest(req);
+    const hasBearerToken = Boolean(parseBearerToken(req.headers.authorization));
+    const hasSessionCookies = Boolean(
+      req.cookies?.[ACCESS_COOKIE_NAME] || req.cookies?.[REFRESH_COOKIE_NAME]
+    );
+
+    if (isAppModeRequest && hasBearerToken && !hasSessionCookies) {
       return next();
     }
 
@@ -227,8 +243,14 @@ if (!mongoURL) {
 
 // Basic test route
 app.get("/", (req, res) => {
-  // res.json({ message: "Welcome to Beds4Crew API" });
-  res.redirect("https://beds4crew-o40r.onrender.com/");
+  const indexPath = path.join(__dirname, "../client/dist/index.html");
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      res.status(404).json({
+        message: "Client app not built. Run 'npm run build' in the client directory."
+      });
+    }
+  });
 
 });
 
