@@ -34,7 +34,15 @@ export default function LoginPage() {
           ...(appMode ? { authMode: "app" } : {}),
         }),
       });
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await res.json().catch(() => ({}))
+        : {};
+
+      if (!contentType.includes("application/json")) {
+        throw new Error("API response was not JSON. Check VITE_API_URL and ensure it targets /api.");
+      }
+
       if (!res.ok) throw new Error(data.message || "Login failed");
 
       if (appMode && (!data?.accessToken || !data?.refreshToken)) {

@@ -2,6 +2,14 @@ const LOCAL_DEV_API_URL = 'http://localhost:3001/api';
 
 const isBrowserRuntime = typeof window !== 'undefined';
 
+const stripTrailingSlashes = (value = '') => value.replace(/\/+$/, '');
+const ensureApiSuffix = (value = '') => {
+  if (!value) return value;
+  const trimmed = stripTrailingSlashes(value.trim());
+  if (!trimmed) return value;
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+};
+
 const isLocalhostHost = (host = '') => ['localhost', '127.0.0.1', '::1'].includes(host);
 
 const isLanHttpApiUrl = (url = '') =>
@@ -26,7 +34,7 @@ const resolveApiUrl = () => {
   const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
 
   if (import.meta.env.MODE === 'production') {
-    return configuredApiUrl || '/api';
+    return configuredApiUrl ? ensureApiSuffix(configuredApiUrl) : '/api';
   }
 
   if (!configuredApiUrl) {
@@ -34,7 +42,7 @@ const resolveApiUrl = () => {
   }
 
   if (!isBrowserRuntime) {
-    return configuredApiUrl;
+    return ensureApiSuffix(configuredApiUrl);
   }
 
   const configuredWebApiUrl = import.meta.env.VITE_WEB_API_URL?.trim();
@@ -42,10 +50,10 @@ const resolveApiUrl = () => {
   const nativeRuntime = isNativeCapacitorRuntime();
 
   if (localWebHost && !nativeRuntime && isLanHttpApiUrl(configuredApiUrl)) {
-    return configuredWebApiUrl || LOCAL_DEV_API_URL;
+    return ensureApiSuffix(configuredWebApiUrl || LOCAL_DEV_API_URL);
   }
 
-  return configuredApiUrl;
+  return ensureApiSuffix(configuredApiUrl);
 };
 
 const API_URL = resolveApiUrl();
@@ -303,13 +311,16 @@ export const refreshAccessToken = async () => {
 // Wrapper for fetch with automatic token refresh and caching
 export const fetchWithAuth = async (url, options = {}) => {
   const method = (options.method || 'GET').toUpperCase();
+  const skipCache = Boolean(options.skipCache);
+  const requestOptions = { ...options };
+  delete requestOptions.skipCache;
   const cacheKey = `${method}:${url}`;
   const appMode = isAppTransportMode();
   const accessToken = readStorage(ACCESS_TOKEN_KEY);
   const useTokenTransport = appMode && Boolean(accessToken);
   
   // Check cache for GET requests
-  if (!options.method || options.method === 'GET') {
+  if ((!requestOptions.method || requestOptions.method === 'GET') && !skipCache) {
     const cached = getCached(cacheKey);
     if (cached) {
       return { json: async () => cached, ok: true };
@@ -321,7 +332,7 @@ export const fetchWithAuth = async (url, options = {}) => {
   }
 
   const headers = {
-    ...options.headers,
+    ...requestOptions.headers,
     ...getAuthModeHeaders(appMode),
   };
 
@@ -334,12 +345,12 @@ export const fetchWithAuth = async (url, options = {}) => {
     headers['X-CSRF-Token'] = csrfToken;
   }
 
-  if (!(options.body instanceof FormData)) {
+  if (!(requestOptions.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
 
   let response = await fetch(url, {
-    ...options,
+    ...requestOptions,
     method,
     credentials: getRequestCredentials(useTokenTransport),
     headers,
@@ -363,7 +374,7 @@ export const fetchWithAuth = async (url, options = {}) => {
     }
 
     response = await fetch(url, {
-      ...options,
+      ...requestOptions,
       method,
       credentials: getRequestCredentials(shouldUseTokenTransportOnRetry),
       headers: retryHeaders,
@@ -371,9 +382,16 @@ export const fetchWithAuth = async (url, options = {}) => {
   }
   
   // Cache successful GET responses
-  if (response.ok && (!options.method || options.method === 'GET')) {
-    const data = await response.clone().json();
-    setCache(cacheKey, data, 60); // Cache for 1 minute
+  if (response.ok && (!requestOptions.method || requestOptions.method === 'GET') && !skipCache) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const data = await response.clone().json();
+        setCache(cacheKey, data, 60); // Cache for 1 minute
+      } catch {
+        // Skip cache when response body cannot be parsed as JSON
+      }
+    }
   }
   
   // Clear cache on mutations
