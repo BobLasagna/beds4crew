@@ -16,6 +16,7 @@ import {
   Menu,
   MenuItem,
   Avatar,
+  Switch,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -42,8 +43,10 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
+import NotificationsOffOutlinedIcon from "@mui/icons-material/NotificationsOffOutlined";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useSnackbar } from "../components/AppSnackbar";
+import { useSnackbar, useSnackbarPreferences } from "../components/AppSnackbar";
 import { isAppTransportMode, logout } from "../utils/api";
 import { notificationService } from "../utils/notificationService";
 import { useThemeMode } from "../contexts/ThemeContext";
@@ -78,6 +81,7 @@ export default function NavigationDrawer({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const snackbar = useSnackbar();
+  const { snackbarMuted, updateSnackbarMuted } = useSnackbarPreferences();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isNativeApp = isAppTransportMode();
   const { mode, toggleTheme, reEnableCookieNotice } = useThemeMode();
@@ -169,6 +173,15 @@ export default function NavigationDrawer({ children }) {
     }
   };
 
+  const handleSnackToggle = (nextMuted) => {
+    updateSnackbarMuted(nextMuted);
+    snackbar(
+      nextMuted ? "Snack popups disabled" : "Snack popups enabled",
+      "info",
+      { force: true }
+    );
+  };
+
   const getMobileNavValue = () => {
     if (location.pathname === "/") {
       return "home";
@@ -176,11 +189,51 @@ export default function NavigationDrawer({ children }) {
     if (location.pathname.startsWith("/properties") || location.pathname.startsWith("/browse")) {
       return "explore";
     }
+    if (location.pathname.startsWith("/login") || location.pathname.startsWith("/register")) {
+      return "account";
+    }
     if (location.pathname.startsWith("/reservations") || location.pathname.startsWith("/trips")) {
       return "messages";
     }
     return false;
   };
+
+  const getMobileMiddleAction = () => {
+    if (user.role === "host") {
+      return {
+        label: "Inbox",
+        value: "messages",
+        icon: (
+          <Badge badgeContent={unreadCount} color="error">
+            <MessageIcon />
+          </Badge>
+        ),
+        onClick: handleMessagesNavigation,
+      };
+    }
+
+    if (user.role === "guest") {
+      return {
+        label: "Trips",
+        value: "messages",
+        icon: (
+          <Badge badgeContent={unreadCount} color="error">
+            <MessageIcon />
+          </Badge>
+        ),
+        onClick: handleMessagesNavigation,
+      };
+    }
+
+    return {
+      label: "Account",
+      value: "account",
+      icon: <AccountCircleIcon />,
+      onClick: () => navigate("/login"),
+    };
+  };
+
+  const mobileMiddleAction = getMobileMiddleAction();
 
   const drawer = (
     <Box sx={{ width: drawerWidth }}>
@@ -314,6 +367,22 @@ export default function NavigationDrawer({ children }) {
             {mode === 'light' ? <DarkModeIcon /> : <LightModeIcon />}
           </ListItemIcon>
           <ListItemText primary={mode === 'light' ? 'Dark Mode' : 'Light Mode'} />
+        </ListItemButton>
+        <ListItemButton onClick={() => handleSnackToggle(!snackbarMuted)}>
+          <ListItemIcon>
+            {snackbarMuted ? <NotificationsOffOutlinedIcon /> : <NotificationsActiveOutlinedIcon />}
+          </ListItemIcon>
+          <ListItemText
+            primary="Disable Snacks"
+            secondary={snackbarMuted ? "Snack popups are off" : "Snack popups are on"}
+          />
+          <Switch
+            edge="end"
+            checked={snackbarMuted}
+            inputProps={{ "aria-label": "Disable snack popups" }}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => handleSnackToggle(event.target.checked)}
+          />
         </ListItemButton>
         {!isNativeApp && (
           <ListItemButton
@@ -493,7 +562,7 @@ export default function NavigationDrawer({ children }) {
         sx={{
           flex: 1,
           py: { xs: 1.5, sm: 2, md: 4 },
-          pb: { xs: 80, md: 4 },
+          pb: { xs: 8, md: 4 },
         }}
       >
         {children}
@@ -528,6 +597,12 @@ export default function NavigationDrawer({ children }) {
             "& .MuiBottomNavigationAction-label": {
               fontSize: "0.7rem",
             },
+            "& .Mui-selected": {
+              color: "primary.main",
+            },
+            "& .MuiBottomNavigationAction-label.Mui-selected": {
+              fontWeight: 700,
+            },
           }}
         >
           <BottomNavigationAction
@@ -537,23 +612,19 @@ export default function NavigationDrawer({ children }) {
             onClick={() => navigate("/")}
           />
           <BottomNavigationAction
-            label="Search"
+            label="Explore"
             value="explore"
             icon={<PublicIcon />}
             onClick={() => navigate("/browse")}
           />
           <BottomNavigationAction
-            label="Messages"
-            value="messages"
-            icon={(
-              <Badge badgeContent={unreadCount} color="error">
-                <MessageIcon />
-              </Badge>
-            )}
-            onClick={handleMessagesNavigation}
+            label={mobileMiddleAction.label}
+            value={mobileMiddleAction.value}
+            icon={mobileMiddleAction.icon}
+            onClick={mobileMiddleAction.onClick}
           />
           <BottomNavigationAction
-            label="Menu"
+            label="More"
             value="menu"
             icon={<MoreHorizIcon />}
             onClick={() => setOpen(true)}

@@ -5,6 +5,38 @@ import CssBaseline from '@mui/material/CssBaseline';
 
 const ThemeContext = createContext();
 
+const THEME_MODE_KEY = 'themeMode';
+const COOKIE_NOTICE_KEY = 'cookieNoticeDismissed';
+
+const readCookie = (name) => {
+  if (typeof document === 'undefined') return null;
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+const writeCookie = (name, value, maxAgeSeconds = 60 * 60 * 24 * 365) => {
+  if (typeof document === 'undefined') return;
+  const securePart = window?.location?.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; SameSite=Lax${securePart}`;
+};
+
+const readPreference = (key, fallback = null) => {
+  const cookieValue = readCookie(key);
+  if (cookieValue !== null) return cookieValue;
+
+  if (typeof window === 'undefined') return fallback;
+
+  const legacyValue = localStorage.getItem(key);
+  if (legacyValue !== null) {
+    writeCookie(key, legacyValue);
+    localStorage.removeItem(key);
+    return legacyValue;
+  }
+
+  return fallback;
+};
+
 export const useThemeMode = () => {
   const context = useContext(ThemeContext);
   if (!context) {
@@ -14,7 +46,6 @@ export const useThemeMode = () => {
 };
 
 export const ThemeContextProvider = ({ children }) => {
-  const COOKIE_NOTICE_KEY = 'cookieNoticeDismissed';
   const semanticTokens = {
     light: {
       primary: {
@@ -75,23 +106,23 @@ export const ThemeContextProvider = ({ children }) => {
       },
     },
   };
-  // Get initial mode from localStorage, default to 'light'
+  // Get initial mode from cookie, default to 'light'
   const [mode, setMode] = useState(() => {
-    const savedMode = localStorage.getItem('themeMode');
+    const savedMode = readPreference(THEME_MODE_KEY, 'light');
     return savedMode || 'light';
   });
   const [cookieNoticeDismissed, setCookieNoticeDismissed] = useState(() => {
-    return localStorage.getItem(COOKIE_NOTICE_KEY) === 'true';
+    return readPreference(COOKIE_NOTICE_KEY, 'false') === 'true';
   });
 
-  // Persist mode to localStorage and update body data-theme attribute whenever it changes
+  // Persist mode to cookie and update body data-theme attribute whenever it changes
   useEffect(() => {
-    localStorage.setItem('themeMode', mode);
+    writeCookie(THEME_MODE_KEY, mode);
     document.body.setAttribute('data-theme', mode);
   }, [mode]);
 
   useEffect(() => {
-    localStorage.setItem(COOKIE_NOTICE_KEY, cookieNoticeDismissed ? 'true' : 'false');
+    writeCookie(COOKIE_NOTICE_KEY, cookieNoticeDismissed ? 'true' : 'false');
   }, [cookieNoticeDismissed]);
 
   const toggleTheme = () => {
