@@ -78,6 +78,22 @@ export default function TripListPage() {
   }, []);
 
   useEffect(() => {
+    const handlePullToRefresh = async () => {
+      await loadBookings({ forceRefresh: true });
+
+      const targetBookingId = selectedBookingId || null;
+      if (targetBookingId) {
+        await loadBookingDetails(targetBookingId, { forceRefresh: true });
+      }
+    };
+
+    window.addEventListener("app:pull-to-refresh", handlePullToRefresh);
+    return () => {
+      window.removeEventListener("app:pull-to-refresh", handlePullToRefresh);
+    };
+  }, [selectedBookingId]);
+
+  useEffect(() => {
     const visibleBookings = getSortedBookings(getFilteredBookings());
 
     if (visibleBookings.length === 0) {
@@ -110,10 +126,10 @@ export default function TripListPage() {
     setBooleanCookie(FILTER_COOKIE_KEYS.showArchived, showArchived);
   }, [showPending, showConfirmed, showArchived]);
 
-  const loadBookings = async () => {
+  const loadBookings = async ({ forceRefresh = false } = {}) => {
     setLoading(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/bookings/guest`);
+      const res = await fetchWithAuth(`${API_URL}/bookings/guest`, { skipCache: forceRefresh });
       const data = await res.json();
       setBookings(data);
     } finally {
@@ -121,8 +137,8 @@ export default function TripListPage() {
     }
   };
 
-  const loadBookingDetails = async (bookingId) => {
-    const res = await fetchWithAuth(`${API_URL}/bookings/${bookingId}`);
+  const loadBookingDetails = async (bookingId, { forceRefresh = false } = {}) => {
+    const res = await fetchWithAuth(`${API_URL}/bookings/${bookingId}`, { skipCache: forceRefresh });
     const booking = await res.json();
     setSelectedBooking(booking);
 
@@ -152,11 +168,17 @@ export default function TripListPage() {
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedBookingId) return;
     
-    await fetchWithAuth(`${API_URL}/bookings/${selectedBookingId}/message`, {
+    const res = await fetchWithAuth(`${API_URL}/bookings/${selectedBookingId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: messageText })
     });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      alert(errorData?.message || "Failed to send message");
+      return;
+    }
     
     setMessageText("");
     await loadBookingDetails(selectedBookingId);
