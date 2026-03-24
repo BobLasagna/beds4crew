@@ -18,8 +18,8 @@ You are coordinating implementation in this workspace.
   2. Update deployment/runbook docs for app flow.
   3. Capture known issues + post-v1 backlog pointers.
 - Primary files expected:
-  - `DEPLOYMENT_GUIDE.md`
-  - `PRODUCTION_DEPLOYMENT.md`
+  - `docs/deployment/DEPLOYMENT_GUIDE.md`
+  - `docs/deployment/PRODUCTION_DEPLOYMENT.md`
   - `MOBILE_APP_PORT_HANDOFF.md`
 
 ## Agent Topology

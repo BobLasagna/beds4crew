@@ -3,7 +3,7 @@
 Use this run order to execute all queued prompts with minimal context drift.
 
 ## One-Click Automation
-- Run `./mobile-one-click.sh` to auto-generate the **next** prompt into `MOBILE_APP_AUTORUN_PROMPT.md`, copy it to clipboard, and open it.
+- Run `./mobile-one-click.sh` to auto-generate the **next** prompt into `docs/mobile/MOBILE_APP_AUTORUN_PROMPT.md`, copy it to clipboard, and open it.
 - Run `./mobile-one-click.sh --rate-limit` to generate a compact low-token version (prepends `MOBILE_APP_RATE_LIMIT_MODE_PROMPT.md`).
 - Run `./mobile-one-click.sh --status` to check queue progress and see the next prompt.
 - After each completed session, append the returned update block to `MOBILE_APP_PORT_HANDOFF.md`; this is what advances the queue.

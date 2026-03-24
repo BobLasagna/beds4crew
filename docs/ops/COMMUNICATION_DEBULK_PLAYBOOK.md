@@ -22,22 +22,22 @@ Use this file as the **single starting point** instead of reading every guide en
 
 ### If you are pitching investors (15 min prep)
 Read only:
-1. `IMPLEMENTATION_SUMMARY.md`
-2. `PRODUCTION_DEPLOYMENT.md`
-3. `OPTIMIZATION_GUIDE.md` (metrics section)
+1. `docs/ops/IMPLEMENTATION_SUMMARY.md`
+2. `docs/deployment/PRODUCTION_DEPLOYMENT.md`
+3. `docs/ops/OPTIMIZATION_GUIDE.md` (metrics section)
 
 ### If you are pitching paying clients (10 min prep)
 Read only:
-1. `SUBSCRIPTION_GUIDE.md`
-2. `SUPPORT_CHAT_GUIDE.md`
-3. `EMAIL_DELIVERABILITY.md` (trust/reliability framing)
+1. `docs/billing/SUBSCRIPTION_GUIDE.md`
+2. `docs/support/SUPPORT_CHAT_GUIDE.md`
+3. `docs/email/EMAIL_DELIVERABILITY.md` (trust/reliability framing)
 
 ### If you are operating production (30 min prep)
 Read only:
-1. `PRODUCTION_DEPLOYMENT.md`
-2. `STRIPE_WEBHOOK_TROUBLESHOOTING.md`
-3. `EMAIL_DEBUG.md`
-4. `DEPLOYMENT_GUIDE.md`
+1. `docs/deployment/PRODUCTION_DEPLOYMENT.md`
+2. `docs/billing/STRIPE_WEBHOOK_TROUBLESHOOTING.md`
+3. `docs/email/EMAIL_DEBUG.md`
+4. `docs/deployment/DEPLOYMENT_GUIDE.md`
 
 ## 3) Canonical Storyline (Use Everywhere)
 
