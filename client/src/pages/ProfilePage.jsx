@@ -15,12 +15,17 @@ import {
   Switch,
   FormControlLabel,
   FormGroup,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
   Alert,
 } from "@mui/material";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useSnackbar } from "../components/AppSnackbar";
-import { fetchWithAuth, fetchJson, fetchJsonWithAuth, getStoredUser, setStoredUser, API_URL } from "../utils/api";
+import { fetchWithAuth, fetchJson, fetchJsonWithAuth, getStoredUser, setStoredUser, API_URL, isAppTransportMode, logout } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 import { scrollElementIntoViewWithOffset } from "../utils/scroll";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -32,6 +37,7 @@ export default function ProfilePage() {
   const storedUser = getStoredUser();
   const listingsTabRef = useRef(null);
   const favoritesTabRef = useRef(null);
+  const settingsTabRef = useRef(null);
   const [tab, setTab] = useState(0);
   const [listings, setListings] = useState([]);
   const [favoriteProperties, setFavoriteProperties] = useState([]);
@@ -72,7 +78,17 @@ export default function ProfilePage() {
     averageRating: null,
     reviewCount: 0,
   });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const snackbar = useSnackbar();
+  // Detect if running inside iOS native app
+  const isIosNative = (() => {
+    if (!isAppTransportMode() || typeof window === "undefined") return false;
+    const getPlatform = window.Capacitor?.getPlatform;
+    return typeof getPlatform === "function" && getPlatform() === "ios";
+  })();
 
   useEffect(() => {
     if (storedUser.role === "host" && storedUser.id) {
@@ -369,10 +385,28 @@ export default function ProfilePage() {
   };
 
   const handleStartSubscription = () => {
+    // disallow stripe manage in iOS native app
+    if (isIosNative) {
+      snackbar("Subscription management is not available inside the iOS app.", "info");
+      return;
+    }
     navigate("/pricing");
   };
 
   const handleManageSubscription = async () => {
+    // disallow stripe manage in iOS native app
+    if (isIosNative) {
+      snackbar("Subscription management is not available inside the iOS app.", "info", {
+        force: true,
+        action: {
+          label: "View Subscription Options",
+          href: "https://beds4crew-o40r.onrender.com/profile?tab=settings#host-status",
+          type: "link"
+        }
+      });
+      return;
+    }
+
     try {
       setBillingLoading(true);
       const res = await fetchWithAuth(`${API_URL}/billing/create-portal-session`, {
@@ -438,6 +472,60 @@ export default function ProfilePage() {
     }
   };
 
+  const handleDeactivateAccount = async () => {
+    if (!deletePassword.trim()) {
+      setDeleteError("Please enter your password");
+      return;
+    }
+
+    try {
+      setDeleteLoading(true);
+      setDeleteError("");
+      const data = await fetchJsonWithAuth(`${API_URL}/users/me/deactivate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+
+      if (data?.user) {
+        setStoredUser(data.user);
+      }
+
+      snackbar(data?.message || "Account disabled", "success");
+      setDeleteDialogOpen(false);
+      navigate("/account-disabled", { replace: true });
+    } catch (error) {
+      setDeleteError(error.message || "Failed to disable account");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword.trim()) {
+      setDeleteError("Please enter your password");
+      return;
+    }
+
+    try {
+      setDeleteLoading(true);
+      setDeleteError("");
+      const data = await fetchJsonWithAuth(`${API_URL}/users/me/request-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      snackbar(data?.message || "Deletion confirmation email sent.", "success");
+      setDeleteDialogOpen(false);
+      setDeletePassword("");
+      setDeleteError("");
+    } catch (error) {
+      setDeleteError(error.message || "Failed to request account deletion");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const loadFavorites = async () => {
     if (!storedUser.id) return;
 
@@ -486,6 +574,14 @@ export default function ProfilePage() {
 
       window.requestAnimationFrame(() => {
         scrollElementIntoViewWithOffset(favoritesTabRef.current, { extraOffset: 16 });
+      });
+    }
+
+    if (tabParam === "settings") {
+      setTab(2);
+
+      window.requestAnimationFrame(() => {
+        scrollElementIntoViewWithOffset(settingsTabRef.current, { extraOffset: 16 });
       });
     }
   }, [location.search]);
@@ -552,7 +648,7 @@ export default function ProfilePage() {
       <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 3 }}>
         <Tab id="listings-tab" ref={listingsTabRef} label="Listings" />
         <Tab id="favorites-tab" ref={favoritesTabRef} label="Favorites" />
-        <Tab label="Account settings" />
+        <Tab id="settings-tab" label="Account settings" />
       </Tabs>
 
       {tab === 0 && (
@@ -694,7 +790,7 @@ export default function ProfilePage() {
 
           {/* Subscription Management */}
           <Card sx={{ p: 3, borderRadius: 3, maxWidth: 520 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            <Typography id="host-status" ref={settingsTabRef} variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
               Host Status
             </Typography>
             <Typography
@@ -729,23 +825,42 @@ export default function ProfilePage() {
                   variant="contained"
                   onClick={handleManageSubscription}
                   disabled={billingLoading}
+                  sx={{
+                    minWidth: 200,
+                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                    ...({
+                      animation: "checkoutPulse 1.1s ease",
+                    }),
+                    "@keyframes checkoutPulse": {
+                      "0%": { transform: "scale(1)" },
+                      "40%": { transform: "scale(1.06)" },
+                      "70%": { transform: "scale(0.98)" },
+                      "100%": { transform: "scale(1)" },
+                    },
+                  }}
                 >
-                  {billingLoading ? "Opening portal..." : "Manage subscription"}
+                  {billingLoading
+                    ? "Opening portal..."
+                    : isIosNative
+                      ? "Manage on web"
+                      : "Manage subscription"}
                 </Button>
               ) : (
                 <Button
                   variant="contained"
                   onClick={handleStartSubscription}
+                  // disable start subscription button if in iOS native app
+                  disabled={isIosNative}
                 >
-                  Choose a plan
+                  {isIosNative ? "Choose on web" : "Choose a plan"}
                 </Button>
               )}
               <Button
                 variant="outlined"
                 onClick={handleSyncSubscription}
-                disabled={billingLoading}
+                disabled={billingLoading || isIosNative}
               >
-                {billingLoading ? "Syncing..." : "Sync Subscription"}
+                {billingLoading ? "Syncing..." : isIosNative ? "Sync Subscription on Web" : "Sync Subscription"}
               </Button>
             </Box>
           </Card>
@@ -785,10 +900,27 @@ export default function ProfilePage() {
                 fullWidth
                 variant={isSubscriptionActive ? "outlined" : "contained"}
                 color={isSubscriptionActive && !tierInfo.canAddMore ? "warning" : "primary"}
-                onClick={() => navigate("/pricing")}
+                onClick={() =>
+                  isIosNative ?
+                  snackbar("Subscription management is not available inside the iOS app. Please visit our website to manage your subscription.", "info",
+                    {
+                      force: true,
+                      action: {
+                        label: "View Pricing",
+                        href: "https://beds4crew-o40r.onrender.com/pricing",
+                        type: "link"
+                      }
+                    }
+                  ) 
+                  : navigate("/pricing")
+                }
                 sx={{ mt: 1 }}
               >
-                {isSubscriptionActive ? "Upgrade Plan" : "Choose a Plan"}
+                {isIosNative
+                  ? "Manage Plan on Web"
+                  : isSubscriptionActive
+                    ? "Upgrade Plan"
+                    : "Choose a Plan"}
               </Button>
             </Card>
           )}
@@ -854,6 +986,56 @@ export default function ProfilePage() {
               />
             </FormGroup>
           </Card>
+          {/* Danger Zone */}
+          <Card sx={{ p: 3, borderRadius: 3, maxWidth: 520, border: "1px solid #d0d0d0", backgroundColor: "#fafafa" }}>
+            <Typography id="danger-zone" ref={settingsTabRef} variant="h6" sx={{ fontWeight: 700, mb: 1, color: "#666" }}>
+              Danger Zone
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Disable account access now and request reactivation after a 30-day hold period. For permanent removal, use Delete Account.
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={() => { setDeleteDialogOpen(true); setDeleteError(""); setDeletePassword(""); }}
+              sx={{ color: "#777", borderColor: "#bbb", backgroundColor: "#f0f0f0", "&:hover": { borderColor: "#999", backgroundColor: "#e8e8e8" } }}
+            >
+              Deactivate Account
+            </Button>
+          </Card>
+
+          <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
+            <DialogTitle>Deactivate your account?</DialogTitle>
+            <DialogContent>
+              <DialogContentText sx={{ mb: 2 }}>
+                This disables your account immediately. Access will be blocked until reactivation, and re-enable is only available after 30 days via email token confirmation.
+              </DialogContentText>
+              <DialogContentText sx={{ mb: 2 }}>
+                Permanent deletion requires email confirmation. We will send a 30-minute secure deletion link to your email address.
+              </DialogContentText>
+              <TextField
+                fullWidth
+                label="Confirm your password"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                autoFocus
+              />
+              {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 3 }}>
+              <Box sx={{ width: "100%", display: "flex", flexDirection: "column", gap: 1 }}>
+                <Button variant="contained" color="warning" onClick={handleDeactivateAccount} disabled={deleteLoading} fullWidth>
+                  {deleteLoading ? "Working..." : "Deactivate"}
+                </Button>
+                <Button size="small" color="error" onClick={handleDeleteAccount} disabled={deleteLoading}>
+                  Request Delete Email
+                </Button>
+                <Button variant="text" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
+                  Cancel
+                </Button>
+              </Box>
+            </DialogActions>
+          </Dialog>
         </Box>
       )}
     </Box>

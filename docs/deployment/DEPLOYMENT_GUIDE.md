@@ -356,7 +356,7 @@ Use this when coordinating milestone session prompts:
 
 What it does:
 - Reads next queued mobile session prompt
-- Generates `MOBILE_APP_AUTORUN_PROMPT.md`
+- Generates `docs/mobile/MOBILE_APP_AUTORUN_PROMPT.md`
 - Copies prompt to clipboard + opens in VS Code (default behavior)
 
 ### Local demo startup (web + API)

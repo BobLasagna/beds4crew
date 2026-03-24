@@ -2,10 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-QUEUE_FILE="$ROOT_DIR/MOBILE_APP_SESSION_QUEUE.md"
-HANDOFF_FILE="$ROOT_DIR/MOBILE_APP_PORT_HANDOFF.md"
-RATE_FILE="$ROOT_DIR/MOBILE_APP_RATE_LIMIT_MODE_PROMPT.md"
-OUTPUT_FILE="$ROOT_DIR/MOBILE_APP_AUTORUN_PROMPT.md"
+MOBILE_DOCS_DIR="$ROOT_DIR/docs/mobile"
+QUEUE_FILE="$MOBILE_DOCS_DIR/MOBILE_APP_SESSION_QUEUE.md"
+HANDOFF_FILE="$MOBILE_DOCS_DIR/MOBILE_APP_PORT_HANDOFF.md"
+RATE_FILE="$MOBILE_DOCS_DIR/MOBILE_APP_RATE_LIMIT_MODE_PROMPT.md"
+OUTPUT_FILE="$MOBILE_DOCS_DIR/MOBILE_APP_AUTORUN_PROMPT.md"
 
 MODE="normal"
 OPEN_FILE=1
@@ -26,7 +27,7 @@ Options:
 Behavior:
   - Reads completed session count from MOBILE_APP_PORT_HANDOFF.md
   - Selects next prompt from MOBILE_APP_SESSION_QUEUE.md
-  - Writes runnable prompt to MOBILE_APP_AUTORUN_PROMPT.md
+  - Writes runnable prompt to docs/mobile/MOBILE_APP_AUTORUN_PROMPT.md
   - Copies prompt to clipboard and opens file by default
 EOF
 }
@@ -91,7 +92,7 @@ if (( COMPLETED_COUNT >= TOTAL_COUNT )); then
 fi
 
 NEXT_PROMPT="${PROMPTS[$COMPLETED_COUNT]}"
-NEXT_PROMPT_PATH="$ROOT_DIR/$NEXT_PROMPT"
+NEXT_PROMPT_PATH="$MOBILE_DOCS_DIR/$NEXT_PROMPT"
 
 if [[ ! -f "$NEXT_PROMPT_PATH" ]]; then
   echo "Next prompt file not found: $NEXT_PROMPT_PATH"
@@ -120,7 +121,7 @@ if (( OPEN_FILE == 1 )) && command -v code >/dev/null 2>&1; then
   code "$OUTPUT_FILE" >/dev/null 2>&1 || true
 fi
 
-echo "Generated: MOBILE_APP_AUTORUN_PROMPT.md"
+echo "Generated: docs/mobile/MOBILE_APP_AUTORUN_PROMPT.md"
 echo "Mode: $MODE"
 echo "Selected session: $NEXT_PROMPT"
 echo "Progress after completion will become: $((COMPLETED_COUNT + 1))/$TOTAL_COUNT"
