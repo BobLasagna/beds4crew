@@ -11,6 +11,8 @@ const { verifyAdmin } = require("../middleware/auth");
 const { deleteUserCascade } = require("../utils/deleteUser");
 const router = express.Router();
 
+const REACTIVATION_HOLD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 const publishApprovedReviewToUser = async (reviewDoc) => {
   const booking = await Booking.findById(reviewDoc.booking).select("host guest").lean();
   if (!booking) return;
@@ -162,8 +164,27 @@ router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
     
     const updateData = { firstName, lastName, role, hasPaid };
     
-    // Allow admin to set account active status
-    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+    // Allow admin to set account active status and override hold-state artifacts.
+    if (isActive !== undefined) {
+      const shouldBeActive = Boolean(isActive);
+      updateData.isActive = shouldBeActive;
+
+      if (shouldBeActive) {
+        updateData.accountDisabledAt = null;
+        updateData.reactivationEligibleAt = null;
+        updateData.reactivationToken = null;
+        updateData.reactivationTokenExpiresAt = null;
+        updateData.reactivationTokenRequestedAt = null;
+        updateData.lastReactivatedAt = new Date();
+      } else {
+        const disabledAt = new Date();
+        updateData.accountDisabledAt = disabledAt;
+        updateData.reactivationEligibleAt = new Date(disabledAt.getTime() + REACTIVATION_HOLD_WINDOW_MS);
+        updateData.reactivationToken = null;
+        updateData.reactivationTokenExpiresAt = null;
+        updateData.reactivationTokenRequestedAt = null;
+      }
+    }
     
     // Allow admin to manually set subscription details
     if (stripeCurrentTier !== undefined) updateData.stripeCurrentTier = parseInt(stripeCurrentTier);
