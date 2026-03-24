@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { TextField, Button, Typography, Box, Avatar, Paper } from "@mui/material";
+import { TextField, Button, Typography, Box, Avatar, Paper, Checkbox, FormControlLabel, Link } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { API_URL } from "../utils/api";
@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const navigate = useNavigate();
   const snackbar = useSnackbar();
 
@@ -37,6 +38,12 @@ export default function RegisterPage() {
 
     if(form.password !== form.confirmPassword) {
       setError("Passwords do not match");
+      setLoading(false);
+      return;
+    }
+
+    if(!termsAccepted) {
+      setError("You must agree to the Terms & Conditions to create an account.");
       setLoading(false);
       return;
     }
@@ -154,8 +161,28 @@ export default function RegisterPage() {
             </Box>
           )}
           
+          <FormControlLabel
+            sx={{ mt: 2, alignItems: "flex-start" }}
+            control={
+              <Checkbox
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                disabled={loading}
+                sx={{ pt: 0 }}
+              />
+            }
+            label={
+              <Typography variant="body2">
+                I agree to the{" "}
+                <Link href="/terms" target="_blank" rel="noopener noreferrer" underline="hover">
+                  Terms &amp; Conditions
+                </Link>
+              </Typography>
+            }
+          />
+
           {error && (
-            <Typography color="error" variant="body2" sx={{ mt: 2 }}>
+            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
               {error}
             </Typography>
           )}
@@ -165,7 +192,7 @@ export default function RegisterPage() {
             variant="contained" 
             color="primary" 
             fullWidth
-            disabled={loading}
+            disabled={loading || !termsAccepted}
             sx={commonStyles.fullWidthButton}
           >
             {loading ? "Creating Account..." : "Sign Up"}
