@@ -247,6 +247,18 @@ app.use("/api/auth/admin/analytics", analyticsRoutes);
 const publicAnalyticsRoutes = require("./routes/publicAnalytics");
 app.use("/api/analytics", publicAnalyticsRoutes);
 
+// Mobile app update policy endpoint — public, no auth required
+app.get("/api/mobile-config", (req, res) => {
+  res.json({
+    ios: {
+      minimumVersion: process.env.IOS_MINIMUM_VERSION || "1.0.1",
+      storeUrl: process.env.IOS_APP_STORE_URL || "https://apps.apple.com/us/app/beds4crew/id6760955475",
+      forceUpdate: process.env.IOS_FORCE_UPDATE !== "false",
+      message: process.env.IOS_UPDATE_MESSAGE || "A new version of Beds4Crew is available. Please update to continue.",
+    },
+  });
+});
+
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   const health = {

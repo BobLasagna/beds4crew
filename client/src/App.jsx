@@ -5,7 +5,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Link as 
 import { Alert, Box, Button, CircularProgress, AlertTitle, Snackbar, LinearProgress } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Slide from "@mui/material/Slide";
+import { App as CapacitorApp } from '@capacitor/app';
 
+import UpdateRequiredScreen from "./components/UpdateRequiredScreen";
 import { SnackbarProvider } from "./components/AppSnackbar";
 import NavigationDrawer from "./components/NavigationDrawer";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -104,6 +106,20 @@ const DisabledAccountGuard = ({ children }) => {
   return children;
 };
 
+// Returns true if installed version is strictly below the minimum
+const isVersionBelow = (installed = '', minimum = '') => {
+  const a = String(installed).split('.').map(Number);
+  const b = String(minimum).split('.').map(Number);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av < bv) return true;
+    if (av > bv) return false;
+  }
+  return false;
+};
+
 function App() {
   const { cookieNoticeDismissed, dismissCookieNotice } = useThemeMode();
   const isNativeApp = isAppTransportMode();
@@ -111,12 +127,60 @@ function App() {
   const [consentStatus, setConsentStatus] = useState(null);
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
+  const [iosUpdatePolicy, setIosUpdatePolicy] = useState(null);
+  const [iosInstalledVersion, setIosInstalledVersion] = useState(null);
+  const [updateCheckDone, setUpdateCheckDone] = useState(false);
   const pullStartYRef = useRef(0);
   const isPullingRef = useRef(false);
   const pullRefreshCooldownRef = useRef(0);
 
   const PULL_DISTANCE_TRIGGER = 82;
   const PULL_DISTANCE_MAX = 120;
+
+  // iOS update gate — runs on cold start and again whenever the app resumes from background
+  useEffect(() => {
+    const platform = window.Capacitor?.getPlatform?.();
+    if (platform !== 'ios') {
+      setUpdateCheckDone(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    const runCheck = async () => {
+      try {
+        const [info, response] = await Promise.all([
+          CapacitorApp.getInfo(),
+          fetch(`${API_URL}/mobile-config`).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+
+        if (cancelled) return;
+
+        if (response?.ios) {
+          setIosUpdatePolicy(response.ios);
+          setIosInstalledVersion(info.version);
+        }
+      } catch {
+        // fail open — network or plugin error should not block the user
+      } finally {
+        if (!cancelled) setUpdateCheckDone(true);
+      }
+    };
+
+    runCheck();
+
+    // Re-check when user returns from the App Store without updating
+    let resumeListener;
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) runCheck();
+    }).then(handle => { resumeListener = handle; });
+
+    return () => {
+      cancelled = true;
+      resumeListener?.remove();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (isNativeApp) {
@@ -299,6 +363,30 @@ function App() {
     dismissCookieNotice();
     setShowCookieNotice(false);
   };
+
+  // Block the entire app on iOS if a force-update is required
+  const updateRequired =
+    updateCheckDone &&
+    iosUpdatePolicy?.forceUpdate === true &&
+    iosInstalledVersion !== null &&
+    isVersionBelow(iosInstalledVersion, iosUpdatePolicy.minimumVersion);
+
+  if (!updateCheckDone && window.Capacitor?.getPlatform?.() === 'ios') {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100dvh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (updateRequired) {
+    return (
+      <UpdateRequiredScreen
+        storeUrl={iosUpdatePolicy.storeUrl}
+        message={iosUpdatePolicy.message}
+      />
+    );
+  }
 
   return (
     <Router>
