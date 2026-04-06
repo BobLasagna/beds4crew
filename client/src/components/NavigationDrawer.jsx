@@ -45,6 +45,7 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import NotificationsOffOutlinedIcon from "@mui/icons-material/NotificationsOffOutlined";
+import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSnackbar, useSnackbarPreferences } from "../components/AppSnackbar";
 import { isAppTransportMode, logout } from "../utils/api";
@@ -81,7 +82,7 @@ export default function NavigationDrawer({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const snackbar = useSnackbar();
-  const { snackbarMuted, updateSnackbarMuted } = useSnackbarPreferences();
+  const { snackbarMuted, updateSnackbarMuted, snackbarPlacement, updateSnackbarPlacement } = useSnackbarPreferences();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isNativeApp = isAppTransportMode();
   const { mode, toggleTheme, reEnableCookieNotice } = useThemeMode();
@@ -180,6 +181,12 @@ export default function NavigationDrawer({ children }) {
       "info",
       { force: true }
     );
+  };
+
+  const handleSnackPlacementToggle = (preferTop) => {
+    const placement = preferTop ? "top" : "bottom";
+    updateSnackbarPlacement(placement);
+    snackbar(`Snack popups moved to ${placement}`, "info", { force: true });
   };
 
   const getMobileNavValue = () => {
@@ -382,6 +389,22 @@ export default function NavigationDrawer({ children }) {
             inputProps={{ "aria-label": "Disable snack popups" }}
             onClick={(event) => event.stopPropagation()}
             onChange={(event) => handleSnackToggle(event.target.checked)}
+          />
+        </ListItemButton>
+        <ListItemButton onClick={() => handleSnackPlacementToggle(snackbarPlacement !== "top")}>
+          <ListItemIcon>
+            <VerticalAlignTopIcon />
+          </ListItemIcon>
+          <ListItemText
+            primary="Snack Position"
+            secondary={snackbarPlacement === "top" ? "Showing at top-right" : "Showing at bottom-right"}
+          />
+          <Switch
+            edge="end"
+            checked={snackbarPlacement === "top"}
+            inputProps={{ "aria-label": "Show snack popups at top" }}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => handleSnackPlacementToggle(event.target.checked)}
           />
         </ListItemButton>
         {!isNativeApp && (
