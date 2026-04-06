@@ -114,6 +114,20 @@ const parsePagination = (req) => {
   return { hasPagination, page, limit, skip: (page - 1) * limit };
 };
 
+router.get("/rate-limits", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const monitor = req.app.get("rateLimitMonitor");
+    if (!monitor || typeof monitor.getSnapshot !== "function") {
+      return res.status(503).json({ message: "Rate limit monitor unavailable" });
+    }
+
+    const snapshot = monitor.getSnapshot();
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch rate limit metrics", error: error.message });
+  }
+});
+
 // Get all users
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
