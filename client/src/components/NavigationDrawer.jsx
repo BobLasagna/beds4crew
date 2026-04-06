@@ -58,6 +58,13 @@ const drawerWidth = 280;
 const topNavHeight = 56;
 const nativeTopNavHeight = 100;
 const nativeDrawerTopPadding = 10;
+const drawerTaglines = [
+  "Crew Housing, Simplified.",
+  "Stay Smart. Sleep Better.",
+  "Find the Right Bed, Fast.",
+  "Your Base Between Jobs.",
+  "Book Reliable Crew Housing.",
+];
 const categories = [
   { value: "apartment", label: "Apartments" },
   { value: "condo", label: "Condos" },
@@ -79,6 +86,7 @@ export default function NavigationDrawer({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [accountAnchor, setAccountAnchor] = useState(null);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const [drawerTaglineIndex, setDrawerTaglineIndex] = useState(0);
   const lastScrollYRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -134,6 +142,20 @@ export default function NavigationDrawer({ children }) {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setDrawerTaglineIndex((prev) => (prev + 1) % drawerTaglines.length);
+    }, 12000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [open]);
 
   const handleLogout = async () => {
     notificationService.stopPolling();
@@ -250,7 +272,7 @@ export default function NavigationDrawer({ children }) {
           Beds4Crew
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Your dashboard
+          {drawerTaglines[drawerTaglineIndex]}
         </Typography>
       </Box>
       <Divider />
@@ -450,7 +472,7 @@ export default function NavigationDrawer({ children }) {
               <MenuIcon />
             </Badge>
           </IconButton>
-          <Box sx={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
+          <Box sx={{ padding: 1, display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
             <Typography
               variant="h6"
               component="div"

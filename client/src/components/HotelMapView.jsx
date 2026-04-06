@@ -106,7 +106,7 @@ export default function MapView({
   const mapRef = useRef(null);
   const selectAfterZoomTimeoutRef = useRef(null);
   const previousSelectedPropertyIdRef = useRef(null);
-  const LOWER_MIDDLE_THIRD_Y_RATIO = 0.76;
+  const LOWER_MIDDLE_THIRD_Y_RATIO = 0.92;
 
   useEffect(() => {
     return () => {
@@ -572,7 +572,14 @@ export default function MapView({
                           {typeof prop.reviewCount === 'number' ? ` (${prop.reviewCount})` : ''}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>
-                          {[prop.category, prop.type, prop.city].filter(Boolean).join(' • ')}
+                          {[prop.city, prop.category].filter(Boolean).join(' • ')}&nbsp;•&nbsp;
+                          <Button
+                            size="small"
+                            onClick={() => onPropertyClick(prop._id)}
+                            sx={{ textTransform: 'none', fontWeight: 600, p: 0, minWidth: 'auto', height: 'auto', fontSize: 'inherit', display: 'inline' }}
+                          >
+                            View Details
+                          </Button>
                         </Typography>
                       </Box>
                     ))}

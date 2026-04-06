@@ -12,7 +12,7 @@ const normalizeLongitude = (longitude) => {
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 
 // Privacy jitter keeps approximate location while avoiding exact coordinates.
-const jitterCoordinates = ({ latitude, longitude, minMeters = 100, maxMeters = 300 }) => {
+const jitterCoordinates = ({ latitude, longitude, minMeters = 50, maxMeters = 1500 }) => {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return { latitude, longitude, applied: false };
   }
