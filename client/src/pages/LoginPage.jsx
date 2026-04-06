@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { TextField, Button, Typography, Box, Paper } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { setTokens, isAppTransportMode, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const snackbar = useSnackbar();
 
   const handleChange = (e) =>
@@ -57,10 +58,16 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
 
       snackbar("Login successful");
-      
+
+      const queryRedirect = searchParams.get("redirect");
+      const isSafeInternalRedirect =
+        typeof queryRedirect === "string" && queryRedirect.startsWith("/") && !queryRedirect.startsWith("//");
+
       // Check if there's a redirect URL saved (from trying to book a property)
       const redirectUrl = localStorage.getItem("redirectAfterLogin");
-      if (redirectUrl) {
+      if (isSafeInternalRedirect) {
+        navigate(queryRedirect);
+      } else if (redirectUrl) {
         localStorage.removeItem("redirectAfterLogin"); // Clear it after use
         navigate(redirectUrl);
       } else {
