@@ -150,13 +150,6 @@ export default function LoginPage() {
             label="Remember email on this device"
             sx={{ mt: 0.5 }}
           />
-
-          {isIosNative && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-              Tip: iOS Keychain can autofill this login with Face ID or passcode after first save.
-            </Typography>
-          )}
-
           <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
             <Button
               variant="text"

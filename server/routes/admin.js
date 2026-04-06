@@ -283,8 +283,6 @@ router.put("/properties/:propertyId", verifyToken, verifyAdmin, async (req, res)
       address,
       city,
       country,
-      latitude,
-      longitude,
     } = req.body;
 
     const property = await Property.findById(req.params.propertyId);
@@ -304,12 +302,15 @@ router.put("/properties/:propertyId", verifyToken, verifyAdmin, async (req, res)
     if (status !== undefined) {
       property.status = status;
     }
-
+    const latitude = property.latitude;
+    const longitude = property.longitude;
+    console.log(latitude, longitude, "post");
     if (Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
       const obscured = jitterCoordinates({
         latitude: Number(latitude),
         longitude: Number(longitude),
       });
+      
       property.latitude = obscured.latitude;
       property.longitude = obscured.longitude;
     } else if (address !== undefined || city !== undefined || country !== undefined) {
@@ -324,6 +325,7 @@ router.put("/properties/:propertyId", verifyToken, verifyAdmin, async (req, res)
         property.longitude = obscured.longitude;
       }
     }
+    console.log(property.latitude, property.longitude, "post");
 
     await property.save();
 

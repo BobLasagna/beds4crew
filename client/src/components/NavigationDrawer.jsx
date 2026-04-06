@@ -46,6 +46,7 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import NotificationsOffOutlinedIcon from "@mui/icons-material/NotificationsOffOutlined";
 import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop";
+import VerticalAlignBottomIcon from "@mui/icons-material/VerticalAlignBottom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSnackbar, useSnackbarPreferences } from "../components/AppSnackbar";
 import { isAppTransportMode, logout } from "../utils/api";
@@ -393,11 +394,11 @@ export default function NavigationDrawer({ children }) {
         </ListItemButton>
         <ListItemButton onClick={() => handleSnackPlacementToggle(snackbarPlacement !== "top")}>
           <ListItemIcon>
-            <VerticalAlignTopIcon />
+            { snackbarPlacement === "top" ? <VerticalAlignTopIcon /> : <VerticalAlignBottomIcon /> }
           </ListItemIcon>
           <ListItemText
             primary="Snack Position"
-            secondary={snackbarPlacement === "top" ? "Showing at top-right" : "Showing at bottom-right"}
+            secondary={snackbarPlacement === "top" ? "Showing at top" : "Showing at bottom"}
           />
           <Switch
             edge="end"
