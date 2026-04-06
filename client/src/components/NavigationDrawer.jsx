@@ -429,6 +429,7 @@ export default function NavigationDrawer({ children }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <AppBar
+        data-app-top-nav="true"
         position="sticky"
         color="default"
         elevation={0}
@@ -593,6 +594,7 @@ export default function NavigationDrawer({ children }) {
       </Box>
 
       <Paper
+        data-app-mobile-bottom-nav="true"
         elevation={0}
         sx={{
           position: "fixed",
