@@ -387,7 +387,14 @@ export default function ProfilePage() {
   const handleStartSubscription = () => {
     // disallow stripe manage in iOS native app
     if (isIosNative) {
-      snackbar("Subscription management is not available inside the iOS app.", "info");
+      snackbar("Starting subscription is not available inside the iOS app.", "info", {
+        force: true,
+        action: {
+          label: "View Subscription Options",
+          href: "https://beds4crew-o40r.onrender.com/pricing",
+          type: "link"
+        }
+      });
       return;
     }
     navigate("/pricing");
@@ -850,7 +857,7 @@ export default function ProfilePage() {
                   variant="contained"
                   onClick={handleStartSubscription}
                   // disable start subscription button if in iOS native app
-                  disabled={isIosNative}
+                  disabled={isIosNative && !showHostFlavorText}
                 >
                   {isIosNative ? "Choose on web" : "Choose a plan"}
                 </Button>

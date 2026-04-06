@@ -45,6 +45,8 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import NotificationsOffOutlinedIcon from "@mui/icons-material/NotificationsOffOutlined";
+import VerticalAlignTopIcon from "@mui/icons-material/VerticalAlignTop";
+import VerticalAlignBottomIcon from "@mui/icons-material/VerticalAlignBottom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSnackbar, useSnackbarPreferences } from "../components/AppSnackbar";
 import { isAppTransportMode, logout } from "../utils/api";
@@ -56,6 +58,13 @@ const drawerWidth = 280;
 const topNavHeight = 56;
 const nativeTopNavHeight = 100;
 const nativeDrawerTopPadding = 10;
+const drawerTaglines = [
+  "Crew Housing, Simplified.",
+  "Stay Smart. Sleep Better.",
+  "Find the Right Bed, Fast.",
+  "Your Base Between Jobs.",
+  "Book Reliable Crew Housing.",
+];
 const categories = [
   { value: "apartment", label: "Apartments" },
   { value: "condo", label: "Condos" },
@@ -77,11 +86,12 @@ export default function NavigationDrawer({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [accountAnchor, setAccountAnchor] = useState(null);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const [drawerTaglineIndex, setDrawerTaglineIndex] = useState(0);
   const lastScrollYRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   const snackbar = useSnackbar();
-  const { snackbarMuted, updateSnackbarMuted } = useSnackbarPreferences();
+  const { snackbarMuted, updateSnackbarMuted, snackbarPlacement, updateSnackbarPlacement } = useSnackbarPreferences();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isNativeApp = isAppTransportMode();
   const { mode, toggleTheme, reEnableCookieNotice } = useThemeMode();
@@ -133,6 +143,20 @@ export default function NavigationDrawer({ children }) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setDrawerTaglineIndex((prev) => (prev + 1) % drawerTaglines.length);
+    }, 12000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [open]);
+
   const handleLogout = async () => {
     notificationService.stopPolling();
     await logout();
@@ -180,6 +204,12 @@ export default function NavigationDrawer({ children }) {
       "info",
       { force: true }
     );
+  };
+
+  const handleSnackPlacementToggle = (preferTop) => {
+    const placement = preferTop ? "top" : "bottom";
+    updateSnackbarPlacement(placement);
+    snackbar(`Snack popups moved to ${placement}`, "info", { force: true });
   };
 
   const getMobileNavValue = () => {
@@ -242,7 +272,7 @@ export default function NavigationDrawer({ children }) {
           Beds4Crew
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Your dashboard
+          {drawerTaglines[drawerTaglineIndex]}
         </Typography>
       </Box>
       <Divider />
@@ -384,6 +414,22 @@ export default function NavigationDrawer({ children }) {
             onChange={(event) => handleSnackToggle(event.target.checked)}
           />
         </ListItemButton>
+        <ListItemButton onClick={() => handleSnackPlacementToggle(snackbarPlacement !== "top")}>
+          <ListItemIcon>
+            { snackbarPlacement === "top" ? <VerticalAlignTopIcon /> : <VerticalAlignBottomIcon /> }
+          </ListItemIcon>
+          <ListItemText
+            primary="Snack Position"
+            secondary={snackbarPlacement === "top" ? "Showing at top" : "Showing at bottom"}
+          />
+          <Switch
+            edge="end"
+            checked={snackbarPlacement === "top"}
+            inputProps={{ "aria-label": "Show snack popups at top" }}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => handleSnackPlacementToggle(event.target.checked)}
+          />
+        </ListItemButton>
         {!isNativeApp && (
           <ListItemButton
             onClick={() => {
@@ -405,6 +451,7 @@ export default function NavigationDrawer({ children }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <AppBar
+        data-app-top-nav="true"
         position="sticky"
         color="default"
         elevation={0}
@@ -425,7 +472,7 @@ export default function NavigationDrawer({ children }) {
               <MenuIcon />
             </Badge>
           </IconButton>
-          <Box sx={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
+          <Box sx={{ padding: 1, display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
             <Typography
               variant="h6"
               component="div"
@@ -569,6 +616,7 @@ export default function NavigationDrawer({ children }) {
       </Box>
 
       <Paper
+        data-app-mobile-bottom-nav="true"
         elevation={0}
         sx={{
           position: "fixed",

@@ -167,6 +167,26 @@ const emailTemplates = {
     `,
   }),
 
+  accountDeleted: (firstName) => ({
+    subject: "Your Beds4Crew Account Has Been Deleted",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1 style="color: #d32f2f;">Your Account Has Been Deleted</h1>
+        <p>Hi ${firstName},</p>
+        <p>Your Beds4Crew account has now been permanently deleted.</p>
+        <p>We're sorry to see you go, and we appreciate the time you spent with us.</p>
+        <p>If you decide to come back, you can create a new account at any time:</p>
+        <p style="margin-top: 30px;">
+          <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/signup" 
+             style="background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Sign Up Again
+          </a>
+        </p>
+        <p style="color: #666; margin-top: 30px;">Take care,<br>The Beds4Crew Team</p>
+      </div>
+    `,
+  }),
+
   // Booking confirmation (for guest)
   bookingConfirmation: (guestName, propertyTitle, startDate, endDate, totalPrice, bookingId) => ({
     subject: `Booking Confirmed: ${propertyTitle}`,
@@ -289,6 +309,11 @@ const emailService = {
 
   sendAccountDeletionEmail: async (email, firstName, deletionToken) => {
     const template = emailTemplates.accountDeletion(firstName, deletionToken);
+    return sendEmail({ to: email, ...template });
+  },
+
+  sendAccountDeletedEmail: async (email, firstName) => {
+    const template = emailTemplates.accountDeleted(firstName);
     return sendEmail({ to: email, ...template });
   },
 

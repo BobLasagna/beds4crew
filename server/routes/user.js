@@ -300,12 +300,13 @@ router.post("/confirm-delete", async (req, res) => {
     const user = await User.findOne({
       accountDeletionToken: hashedToken,
       accountDeletionTokenExpiresAt: { $gt: new Date() },
-    }).select("_id");
+    }).select("_id email firstName");
 
     if (!user) {
       return res.status(400).json({ message: "This deletion link is invalid or has expired." });
     }
 
+    await emailService.sendAccountDeletedEmail(user.email, user.firstName);
     await deleteUserCascade(user._id);
     clearAuthCookies(res);
     return res.status(200).json({ message: "Account deleted successfully." });
@@ -333,9 +334,10 @@ router.post("/me/deactivate", verifyToken, async (req, res) => {
     }
 
     const now = new Date();
+    const holdTimerStart = user.lastReactivatedAt ? new Date(user.lastReactivatedAt) : now;
     user.isActive = false;
     user.accountDisabledAt = now;
-    user.reactivationEligibleAt = new Date(now.getTime() + REACTIVATION_HOLD_WINDOW_MS);
+    user.reactivationEligibleAt = new Date(holdTimerStart.getTime() + REACTIVATION_HOLD_WINDOW_MS);
     user.reactivationToken = null;
     user.reactivationTokenExpiresAt = null;
     user.reactivationTokenRequestedAt = null;
@@ -355,8 +357,13 @@ router.post("/me/deactivate", verifyToken, async (req, res) => {
 
     const isAppAuthRequest = isAppAuthModeRequest(req);
 
+    const holdRemainingMs = Math.max(user.reactivationEligibleAt.getTime() - now.getTime(), 0);
+    const canRequestNow = holdRemainingMs === 0;
+
     return res.json({
-      message: "Account disabled. You can request reactivation after 30 days.",
+      message: canRequestNow
+        ? "Account disabled. You can request reactivation now."
+        : "Account disabled. Reactivation will be available after the hold period.",
       csrfToken,
       ...(isAppAuthRequest ? { accessToken, refreshToken } : {}),
       user: {

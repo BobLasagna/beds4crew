@@ -106,7 +106,7 @@ export default function MapView({
   const mapRef = useRef(null);
   const selectAfterZoomTimeoutRef = useRef(null);
   const previousSelectedPropertyIdRef = useRef(null);
-  const LOWER_MIDDLE_THIRD_Y_RATIO = 0.68;
+  const LOWER_MIDDLE_THIRD_Y_RATIO = 0.92;
 
   useEffect(() => {
     return () => {
@@ -547,24 +547,41 @@ export default function MapView({
                       {group.length} places to stay in this area
                     </Typography>
                     {group.slice(0, 3).map((prop) => (
-                      <Button
-                        key={prop._id}
-                        variant="text"
-                        size="small"
-                        onClick={() => focusPropertyAfterZoom(prop)}
-                        sx={{
-                          display: 'flex',
-                          width: '100%',
-                          justifyContent: 'flex-start',
-                          textAlign: 'left',
-                          textTransform: 'none',
-                          px: 0,
-                          minWidth: '100%',
-                          mb: 0.25,
-                        }}
-                      >
-                        {prop.title}
-                      </Button>
+                      <Box key={prop._id} sx={{ mb: 1.25 }}>
+                        <Button
+                          variant="text"
+                          size="small"
+                          onClick={() => focusPropertyAfterZoom(prop)}
+                          sx={{
+                            display: 'flex',
+                            width: '100%',
+                            justifyContent: 'flex-start',
+                            textAlign: 'left',
+                            textTransform: 'none',
+                            px: 0,
+                            minWidth: '100%',
+                            mb: 0.25,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {prop.title}
+                        </Button>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>
+                          {formatPriceDisplay(prop)}
+                          {typeof prop.rating === 'number' ? ` • ★ ${prop.rating.toFixed(1)}` : ''}
+                          {typeof prop.reviewCount === 'number' ? ` (${prop.reviewCount})` : ''}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.4 }}>
+                          {[prop.city, prop.category].filter(Boolean).join(' • ')}&nbsp;•&nbsp;
+                          <Button
+                            size="small"
+                            onClick={() => onPropertyClick(prop._id)}
+                            sx={{ textTransform: 'none', fontWeight: 600, p: 0, minWidth: 'auto', height: 'auto', fontSize: 'inherit', display: 'inline' }}
+                          >
+                            View Details
+                          </Button>
+                        </Typography>
+                      </Box>
                     ))}
                     {group.length > 3 && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>

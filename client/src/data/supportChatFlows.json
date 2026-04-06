@@ -308,7 +308,7 @@
         "options": [],
         "solutionLink": {
           "label": "Account Settings - Danger Zone",
-          "href": "/account-settings#danger-zone"
+          "href": "/profile?tab=settings#danger-zone"
         }
       }
     }

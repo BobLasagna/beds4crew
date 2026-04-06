@@ -1,16 +1,33 @@
-import React, { useState } from "react";
-import { TextField, Button, Typography, Box, Paper } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { TextField, Button, Typography, Box, Paper, Checkbox, FormControlLabel } from "@mui/material";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSnackbar } from "../components/AppSnackbar";
 import { setTokens, isAppTransportMode, API_URL } from "../utils/api";
 import { commonStyles } from "../utils/styleConstants";
 
+const REMEMBERED_LOGIN_EMAIL_KEY = "rememberedLoginEmail";
+
 export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const snackbar = useSnackbar();
+  const isIosNative = (() => {
+    if (!isAppTransportMode() || typeof window === "undefined") return false;
+    const getPlatform = window.Capacitor?.getPlatform;
+    return typeof getPlatform === "function" && getPlatform() === "ios";
+  })();
+
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem(REMEMBERED_LOGIN_EMAIL_KEY) || "";
+    if (!rememberedEmail) return;
+
+    setForm((prev) => ({ ...prev, email: rememberedEmail }));
+    setRememberEmail(true);
+  }, []);
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -56,11 +73,23 @@ export default function LoginPage() {
       );
       localStorage.setItem("user", JSON.stringify(data.user));
 
+      if (rememberEmail && form.email.trim()) {
+        localStorage.setItem(REMEMBERED_LOGIN_EMAIL_KEY, form.email.trim());
+      } else {
+        localStorage.removeItem(REMEMBERED_LOGIN_EMAIL_KEY);
+      }
+
       snackbar("Login successful");
-      
+
+      const queryRedirect = searchParams.get("redirect");
+      const isSafeInternalRedirect =
+        typeof queryRedirect === "string" && queryRedirect.startsWith("/") && !queryRedirect.startsWith("//");
+
       // Check if there's a redirect URL saved (from trying to book a property)
       const redirectUrl = localStorage.getItem("redirectAfterLogin");
-      if (redirectUrl) {
+      if (isSafeInternalRedirect) {
+        navigate(queryRedirect);
+      } else if (redirectUrl) {
         localStorage.removeItem("redirectAfterLogin"); // Clear it after use
         navigate(redirectUrl);
       } else {
@@ -84,7 +113,7 @@ export default function LoginPage() {
           Sign in to continue to Beds4Crew
         </Typography>
         
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete="on">
           <TextField
             name="email"
             label="Email"
@@ -95,6 +124,8 @@ export default function LoginPage() {
             value={form.email}
             onChange={handleChange}
             disabled={loading}
+            autoComplete="username"
+            inputProps={{ autoCapitalize: "none", autoCorrect: "off" }}
           />
           <TextField
             name="password"
@@ -106,8 +137,19 @@ export default function LoginPage() {
             value={form.password}
             onChange={handleChange}
             disabled={loading}
+            autoComplete="current-password"
           />
 
+          <FormControlLabel
+            control={(
+              <Checkbox
+                checked={rememberEmail}
+                onChange={(event) => setRememberEmail(event.target.checked)}
+              />
+            )}
+            label="Remember email on this device"
+            sx={{ mt: 0.5 }}
+          />
           <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
             <Button
               variant="text"

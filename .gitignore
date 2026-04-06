@@ -29,3 +29,4 @@ Thumbs.db
 # Uploads (optional - comment out if you want to commit sample images)
 server/public/uploads/*
 !server/public/uploads/.gitkeep
+.code-workspace

@@ -9,7 +9,12 @@ const cache = require("../utils/cache");
 const verifyToken = require("../middleware/auth");
 const { verifyAdmin } = require("../middleware/auth");
 const { deleteUserCascade } = require("../utils/deleteUser");
+const { geocodeAddress } = require("../utils/geocoding");
+const { sanitizeInput } = require("../utils/validation");
+const { jitterCoordinates } = require("../utils/locationPrivacy");
 const router = express.Router();
+
+const REACTIVATION_HOLD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 const publishApprovedReviewToUser = async (reviewDoc) => {
   const booking = await Booking.findById(reviewDoc.booking).select("host guest").lean();
@@ -112,6 +117,20 @@ const parsePagination = (req) => {
   return { hasPagination, page, limit, skip: (page - 1) * limit };
 };
 
+router.get("/rate-limits", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const monitor = req.app.get("rateLimitMonitor");
+    if (!monitor || typeof monitor.getSnapshot !== "function") {
+      return res.status(503).json({ message: "Rate limit monitor unavailable" });
+    }
+
+    const snapshot = monitor.getSnapshot();
+    return res.json(snapshot);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch rate limit metrics", error: error.message });
+  }
+});
+
 // Get all users
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
@@ -162,8 +181,27 @@ router.put("/users/:userId", verifyToken, verifyAdmin, async (req, res) => {
     
     const updateData = { firstName, lastName, role, hasPaid };
     
-    // Allow admin to set account active status
-    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+    // Allow admin to set account active status and override hold-state artifacts.
+    if (isActive !== undefined) {
+      const shouldBeActive = Boolean(isActive);
+      updateData.isActive = shouldBeActive;
+
+      if (shouldBeActive) {
+        updateData.accountDisabledAt = null;
+        updateData.reactivationEligibleAt = null;
+        updateData.reactivationToken = null;
+        updateData.reactivationTokenExpiresAt = null;
+        updateData.reactivationTokenRequestedAt = null;
+        updateData.lastReactivatedAt = new Date();
+      } else {
+        const disabledAt = new Date();
+        updateData.accountDisabledAt = disabledAt;
+        updateData.reactivationEligibleAt = new Date(disabledAt.getTime() + REACTIVATION_HOLD_WINDOW_MS);
+        updateData.reactivationToken = null;
+        updateData.reactivationTokenExpiresAt = null;
+        updateData.reactivationTokenRequestedAt = null;
+      }
+    }
     
     // Allow admin to manually set subscription details
     if (stripeCurrentTier !== undefined) updateData.stripeCurrentTier = parseInt(stripeCurrentTier);
@@ -235,24 +273,71 @@ router.get("/properties", verifyToken, verifyAdmin, async (req, res) => {
 // Update property (admin)
 router.put("/properties/:propertyId", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const { title, description, pricePerNight, maxGuests, category, status } = req.body;
-    const updateData = { title, description, pricePerNight, maxGuests, category };
+    const {
+      title,
+      description,
+      pricePerNight,
+      maxGuests,
+      category,
+      status,
+      address,
+      city,
+      country,
+    } = req.body;
 
-    if (status !== undefined) {
-      updateData.status = status;
-    }
-
-    const property = await Property.findByIdAndUpdate(
-      req.params.propertyId,
-      updateData,
-      { new: true }
-    ).populate("ownerHost", "firstName lastName email");
-
+    const property = await Property.findById(req.params.propertyId);
     if (!property) {
       return res.status(404).json({ message: "Property not found" });
     }
 
-    res.json(property);
+    if (title !== undefined) property.title = sanitizeInput(title);
+    if (description !== undefined) property.description = sanitizeInput(description);
+    if (pricePerNight !== undefined) property.pricePerNight = pricePerNight;
+    if (maxGuests !== undefined) property.maxGuests = maxGuests;
+    if (category !== undefined) property.category = sanitizeInput(category);
+    if (address !== undefined) property.address = sanitizeInput(address);
+    if (city !== undefined) property.city = sanitizeInput(city);
+    if (country !== undefined) property.country = sanitizeInput(country);
+
+    if (status !== undefined) {
+      property.status = status;
+    }
+    const latitude = property.latitude;
+    const longitude = property.longitude;
+    console.log(latitude, longitude, "post");
+    if (Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
+      const obscured = jitterCoordinates({
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+      });
+      
+      property.latitude = obscured.latitude;
+      property.longitude = obscured.longitude;
+    } else if (address !== undefined || city !== undefined || country !== undefined) {
+      const fullAddress = `${property.address || ""}, ${property.city || ""}, ${property.country || ""}`;
+      const coords = await geocodeAddress(fullAddress);
+      if (coords?.latitude && coords?.longitude) {
+        const obscured = jitterCoordinates({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        property.latitude = obscured.latitude;
+        property.longitude = obscured.longitude;
+      }
+    }
+    console.log(property.latitude, property.longitude, "post");
+
+    await property.save();
+
+    const populatedProperty = await property.populate("ownerHost", "firstName lastName email");
+
+    cache.delete("properties:all");
+    cache.delete(`property:${req.params.propertyId}`);
+    if (property.ownerHost) {
+      cache.delete(`properties:user:${property.ownerHost}`);
+    }
+
+    res.json(populatedProperty);
   } catch (error) {
     res.status(500).json({ message: "Failed to update property", error: error.message });
   }

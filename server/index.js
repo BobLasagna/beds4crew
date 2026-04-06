@@ -36,11 +36,46 @@ const csrfExemptPaths = new Set([
 ]);
 
 const rateLimitBuckets = new Map();
+const rateLimitMetrics = new Map();
+
+const recordRateLimitMetric = (scope, blocked) => {
+  const metric = rateLimitMetrics.get(scope) || {
+    requests: 0,
+    blocked: 0,
+    lastRequestAt: null,
+    lastBlockedAt: null,
+  };
+
+  metric.requests += 1;
+  metric.lastRequestAt = new Date().toISOString();
+  if (blocked) {
+    metric.blocked += 1;
+    metric.lastBlockedAt = metric.lastRequestAt;
+  }
+
+  rateLimitMetrics.set(scope, metric);
+};
+
+app.set("rateLimitMonitor", {
+  getSnapshot: () => {
+    const scopes = {};
+    for (const [scope, metric] of rateLimitMetrics.entries()) {
+      scopes[scope] = { ...metric };
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      scopeCount: rateLimitMetrics.size,
+      scopes,
+    };
+  },
+});
 
 const createRateLimiter = ({ windowMs, max, keyPrefix }) => (req, res, next) => {
   const key = `${keyPrefix}:${req.ip}`;
   const now = Date.now();
   const bucket = rateLimitBuckets.get(key);
+  recordRateLimitMetric(keyPrefix, false);
 
   if (!bucket || now > bucket.resetAt) {
     rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
@@ -48,6 +83,7 @@ const createRateLimiter = ({ windowMs, max, keyPrefix }) => (req, res, next) => 
   }
 
   if (bucket.count >= max) {
+    recordRateLimitMetric(keyPrefix, true);
     return res.status(429).json({ message: "Too many requests. Please try again shortly." });
   }
 
@@ -81,6 +117,10 @@ const configuredClientOrigins = CLIENT_URL
       .filter(Boolean)
   : [];
 
+const wildcardAllowedOrigins = configuredClientOrigins
+  .filter((origin) => origin.startsWith("*."))
+  .map((origin) => origin.slice(2));
+
 const allowedOrigins = [...new Set([...configuredClientOrigins, ...defaultAllowedOrigins])];
 
 const corsOriginValidator = (origin, callback) => {
@@ -92,6 +132,22 @@ const corsOriginValidator = (origin, callback) => {
     return callback(null, true);
   }
 
+  const originHost = (() => {
+    try {
+      return new URL(origin).host;
+    } catch {
+      return "";
+    }
+  })();
+
+  const isWildcardMatch = wildcardAllowedOrigins.some((allowedHost) =>
+    originHost === allowedHost || originHost.endsWith(`.${allowedHost}`)
+  );
+
+  if (isWildcardMatch) {
+    return callback(null, true);
+  }
+
   return callback(new Error(`CORS blocked for origin: ${origin}`));
 };
 
@@ -100,10 +156,12 @@ const corsOptions = {
   origin: corsOriginValidator,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Mode']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Auth-Mode'],
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
+app.options(/^\/api\/.*/, cors(corsOptions));
 app.use(analyticsMiddleware);
 
 if (AUTH_USE_HTTP_ONLY_COOKIES && AUTH_REQUIRE_CSRF) {
