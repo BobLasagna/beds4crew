@@ -8,6 +8,7 @@ const { geocodeAddress } = require("../utils/geocoding");
 const { uploadMultiple } = require("../utils/fileUpload");
 const { sanitizeInput } = require("../utils/validation");
 const { getListingLimit } = require("../utils/subscriptionTiers");
+const { jitterCoordinates } = require("../utils/locationPrivacy");
 const router = express.Router();
 
 // Create property (Host only)
@@ -69,8 +70,12 @@ router.post("/", verifyToken, uploadMultiple, async (req, res) => {
     if (address) {
       const coords = await geocodeAddress(`${address}, ${city}, ${country}`);
       if (coords) {
-        latitude = coords.latitude;
-        longitude = coords.longitude;
+        const obscured = jitterCoordinates({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        latitude = obscured.latitude;
+        longitude = obscured.longitude;
       }
     }
 
@@ -675,7 +680,20 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 
     // Update fields
-    const { title, description, pricePerNight, maxGuests, facilities, category, rooms } = req.body;
+    const {
+      title,
+      description,
+      pricePerNight,
+      maxGuests,
+      facilities,
+      category,
+      rooms,
+      address,
+      city,
+      country,
+      latitude,
+      longitude,
+    } = req.body;
     
     if (title) property.title = sanitizeInput(title);
     if (description) property.description = sanitizeInput(description);
@@ -685,6 +703,9 @@ router.put("/:id", verifyToken, async (req, res) => {
       ? facilities.split(",").map(f => sanitizeInput(f)) 
       : facilities.map(f => sanitizeInput(f));
     if (category) property.category = sanitizeInput(category);
+    if (address) property.address = sanitizeInput(address);
+    if (city) property.city = sanitizeInput(city);
+    if (country) property.country = sanitizeInput(country);
     if (rooms) {
       // Ensure all beds have isAvailable set to true by default
       rooms.forEach(room => {
@@ -695,6 +716,26 @@ router.put("/:id", verifyToken, async (req, res) => {
         });
       });
       property.rooms = rooms;
+    }
+
+    if (Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
+      const obscured = jitterCoordinates({
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+      });
+      property.latitude = obscured.latitude;
+      property.longitude = obscured.longitude;
+    } else if (address || city || country) {
+      const fullAddress = `${property.address || ""}, ${property.city || ""}, ${property.country || ""}`;
+      const coords = await geocodeAddress(fullAddress);
+      if (coords?.latitude && coords?.longitude) {
+        const obscured = jitterCoordinates({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        property.latitude = obscured.latitude;
+        property.longitude = obscured.longitude;
+      }
     }
     
     // Handle status - can only activate if rooms are configured and listing limit allows
