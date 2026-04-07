@@ -187,13 +187,18 @@ export default function NavigationDrawer({ children }) {
     setAccountAnchor(null);
   };
 
+  const navigateToLoginWithReturn = () => {
+    const from = `${location.pathname}${location.search || ""}${location.hash || ""}` || "/";
+    navigate("/login", { state: { from } });
+  };
+
   const handleMessagesNavigation = () => {
     if (user.role === "host") {
       navigate("/reservations");
     } else if (user.role === "guest") {
       navigate("/trips");
     } else {
-      navigate("/login");
+      navigateToLoginWithReturn();
     }
   };
 
@@ -259,7 +264,7 @@ export default function NavigationDrawer({ children }) {
       label: "Account",
       value: "account",
       icon: <AccountCircleIcon />,
-      onClick: () => navigate("/login"),
+      onClick: navigateToLoginWithReturn,
     };
   };
 
@@ -545,7 +550,7 @@ export default function NavigationDrawer({ children }) {
                   color="inherit"
                   aria-label="Sign in"
                   sx={{ display: { xs: "inline-flex" } }}
-                  onClick={() => navigate("/login")}
+                  onClick={navigateToLoginWithReturn}
                 >
                   <AccountCircleIcon />
                 </IconButton>
@@ -558,7 +563,7 @@ export default function NavigationDrawer({ children }) {
       <Menu anchorEl={accountAnchor} open={Boolean(accountAnchor)} onClose={closeAccountMenu}>
         {(isEmpty(user)
           ? [
-              <MenuItem key="login" onClick={() => { closeAccountMenu(); navigate("/login"); }}>Sign in</MenuItem>,
+              <MenuItem key="login" onClick={() => { closeAccountMenu(); navigateToLoginWithReturn(); }}>Sign in</MenuItem>,
               <MenuItem key="register" onClick={() => { closeAccountMenu(); navigate("/register"); }}>Create account</MenuItem>,
             ]
           : [
