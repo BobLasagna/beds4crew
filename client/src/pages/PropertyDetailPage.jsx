@@ -164,7 +164,7 @@ export default function PropertyDetailPage() {
       snackbar("Must be logged in to book", "warning");
       // Save the current property URL to redirect back after login
       localStorage.setItem("redirectAfterLogin", `/property/${id}`);
-      navigate("/login");
+      navigate("/login", { state: { from: `/property/${id}` } });
       return;
     }
     
@@ -818,7 +818,7 @@ export default function PropertyDetailPage() {
                         : "Sign in to see availability and book instantly."}
                     </Typography>
                     {!currentUser?.id && (
-                      <Button variant="contained" fullWidth onClick={() => navigate("/login")}>
+                      <Button variant="contained" fullWidth onClick={() => navigate("/login", { state: { from: `/property/${id}` } })}>
                         Sign in to book
                       </Button>
                     )}
